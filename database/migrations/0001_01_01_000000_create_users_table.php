@@ -29,8 +29,8 @@ return new class extends Migration
             $table->string('status_ketersediaan')->nullable();
             $table->text('catatan_medis')->nullable();
             $table->timestamp('email_verified_at')->nullable();
-            //$table->string('password');
-            //$table->rememberToken();
+            $table->string('password')->nullable();
+            $table->rememberToken();
             $table->timestamps();
         });
 

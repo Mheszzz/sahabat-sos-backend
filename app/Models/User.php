@@ -22,7 +22,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
-        //'password',
+        'password',
         'alamat',
         'no_telp',
         'role',
@@ -43,12 +43,11 @@ class User extends Authenticatable
      *
      * @var list<string>
      */
-    /*
     protected $hidden = [
         'password',
         'remember_token',
     ];
-    */
+
     /**
      * Get the attributes that should be cast.
      *
@@ -58,12 +57,28 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            //'password' => 'hashed',
-            'getaran' => 'boolean',
-            'talkback' => 'boolean',
-            'panduan_suara' => 'boolean',
-            'text_besar' => 'boolean',
+            'password'          => 'hashed',
+            'getaran'           => 'boolean',
+            'talkback'          => 'boolean',
+            'panduan_suara'     => 'boolean',
+            'text_besar'        => 'boolean',
         ];
+    }
+
+    /**
+     * Cek apakah data profil pengguna/relawan sudah lengkap
+     */
+    public function isProfileComplete(): bool
+    {
+        return !empty($this->no_telp) && !empty($this->alamat);
+    }
+
+    /**
+     * Accessor untuk is_profile_complete
+     */
+    public function getIsProfileCompleteAttribute(): bool
+    {
+        return $this->isProfileComplete();
     }
 
     /**

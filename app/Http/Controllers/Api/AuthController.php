@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
@@ -50,6 +51,13 @@ class AuthController extends Controller
                         'message' => 'Akses ditolak. Jalur login ini hanya untuk Pengguna dan Relawan.'
                     ], 403);
                 }
+
+                // Proteksi: Tolak jika role terdaftar berbeda dengan role aplikasi yang digunakan
+                if ($user->role !== $requestedRole) {
+                    return response()->json([
+                        'message' => "Akses ditolak. Akun Anda terdaftar sebagai '{$user->role}', tidak bisa login di aplikasi '{$requestedRole}'."
+                    ], 403);
+                }
             } else {
                 // 2. Jika belum ada di accounts, cek apakah email sudah ada di tabel users
                 $user = User::where('email', $googleUser->getEmail())->first();
@@ -65,7 +73,13 @@ class AuthController extends Controller
                 } else {
                     if (!in_array($user->role, ['pengguna', 'relawan'])) {
                         return response()->json([
-                            'message' => 'Akses ditolak. Email ini terdaftar sebagai Admin.'
+                            'message' => 'Akses ditolak. Email ini terdaftar sebagai Admin/Superadmin.'
+                        ], 403);
+                    }
+
+                    if ($user->role !== $requestedRole) {
+                        return response()->json([
+                            'message' => "Akses ditolak. Akun Anda terdaftar sebagai '{$user->role}', tidak bisa login di aplikasi '{$requestedRole}'."
                         ], 403);
                     }
                 }
@@ -82,14 +96,18 @@ class AuthController extends Controller
 
             DB::commit();
 
+            // Cek apakah profil pengguna sudah lengkap
+            $isProfileComplete = $user->isProfileComplete();
+
             // Generate Token Sanctum
             $token = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
-                'message'      => 'Login Google berhasil',
-                'access_token' => $token,
-                'token_type'   => 'Bearer',
-                'user'         => $user,
+                'message'             => $isProfileComplete ? 'Login Google berhasil' : 'Login Google berhasil, silakan lengkapi profil Anda.',
+                'access_token'        => $token,
+                'token_type'          => 'Bearer',
+                'is_profile_complete' => $isProfileComplete,
+                'user'                => $user,
             ]);
 
         } catch (\Exception $e) {
@@ -102,7 +120,97 @@ class AuthController extends Controller
     }
 
     /**
-     * 2. URL REDIRECT GOOGLE (Khusus Pengujian via Web Browser)
+     * 2. LENGKAPI PROFIL (Pengguna & Relawan Baru)
+     */
+    public function completeProfile(Request $request)
+    {
+        $user = $request->user();
+
+        if (!in_array($user->role, ['pengguna', 'relawan'])) {
+            return response()->json([
+                'message' => 'Layanan ini hanya untuk Pengguna dan Relawan.'
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'alamat'              => 'required|string|max:255',
+            'no_telp'             => 'required|string|max:20|unique:users,no_telp,' . $user->id,
+            'kategori_user'       => 'nullable|in:umum,tunarungu,tunanetra,tunawicara',
+            'catatan_medis'       => 'nullable|string',
+            'getaran'             => 'nullable|boolean',
+            'talkback'            => 'nullable|boolean',
+            'panduan_suara'       => 'nullable|boolean',
+            'text_besar'          => 'nullable|boolean',
+            'status_ketersediaan' => 'nullable|string',
+            'device_id'           => 'nullable|string',
+            'lokasi_user'         => 'nullable|string',
+        ]);
+
+        $user->update($validated);
+
+        return response()->json([
+            'message'             => 'Profil berhasil diperbarui.',
+            'is_profile_complete' => $user->isProfileComplete(),
+            'user'                => $user->refresh(),
+        ]);
+    }
+
+    /**
+     * 3. LOGIN ADMIN & SUPERADMIN (Web React Dashboard via Username/Email & Password)
+     */
+    public function adminLogin(Request $request)
+    {
+        $request->validate([
+            'email'    => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        // Cari user yang rolenya admin atau superadmin
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user || !in_array($user->role, ['admin', 'superadmin'])) {
+            return response()->json([
+                'message' => 'Kredensial salah atau Anda tidak memiliki akses admin.'
+            ], 401);
+        }
+
+        // Cari kredensial lokal di tabel accounts
+        $account = Account::where('user_id', $user->id)
+            ->where('provider', 'local')
+            ->first();
+
+        if (!$account || !Hash::check($request->password, $account->password)) {
+            return response()->json([
+                'message' => 'Email atau password salah.'
+            ], 401);
+        }
+
+        // Generate Sanctum Token
+        $token = $user->createToken('admin_auth_token')->plainTextToken;
+
+        return response()->json([
+            'message'      => 'Login Admin berhasil',
+            'access_token' => $token,
+            'token_type'   => 'Bearer',
+            'user'         => $user,
+        ]);
+    }
+
+    /**
+     * 4. ME / GET CURRENT USER PROFILE
+     */
+    public function me(Request $request)
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'user'                => $user,
+            'is_profile_complete' => $user->isProfileComplete(),
+        ]);
+    }
+
+    /**
+     * 5. URL REDIRECT GOOGLE (Khusus Pengujian via Web Browser)
      */
     public function redirectToGoogle(Request $request)
     {
@@ -115,7 +223,7 @@ class AuthController extends Controller
     }
 
     /**
-     * 3. CALLBACK GOOGLE (Khusus Pengujian via Web Browser)
+     * 6. CALLBACK GOOGLE (Khusus Pengujian via Web Browser)
      */
     public function handleGoogleCallback(Request $request)
     {
@@ -145,6 +253,12 @@ class AuthController extends Controller
                         'message' => 'Akses ditolak. Jalur login ini hanya untuk Pengguna dan Relawan.'
                     ], 403);
                 }
+
+                if ($user->role !== $requestedRole) {
+                    return response()->json([
+                        'message' => "Akses ditolak. Akun Anda terdaftar sebagai '{$user->role}', tidak bisa login di aplikasi '{$requestedRole}'."
+                    ], 403);
+                }
             } else {
                 $user = User::where('email', $googleUser->getEmail())->first();
 
@@ -161,6 +275,12 @@ class AuthController extends Controller
                             'message' => 'Akses ditolak. Email ini terdaftar sebagai Admin.'
                         ], 403);
                     }
+
+                    if ($user->role !== $requestedRole) {
+                        return response()->json([
+                            'message' => "Akses ditolak. Akun Anda terdaftar sebagai '{$user->role}', tidak bisa login di aplikasi '{$requestedRole}'."
+                        ], 403);
+                    }
                 }
 
                 Account::create([
@@ -174,13 +294,15 @@ class AuthController extends Controller
 
             DB::commit();
 
+            $isProfileComplete = $user->isProfileComplete();
             $token = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
-                'message'      => 'Login Google berhasil',
-                'access_token' => $token,
-                'token_type'   => 'Bearer',
-                'user'         => $user,
+                'message'             => 'Login Google berhasil',
+                'access_token'        => $token,
+                'token_type'          => 'Bearer',
+                'is_profile_complete' => $isProfileComplete,
+                'user'                => $user,
             ]);
 
         } catch (\Exception $e) {
@@ -193,7 +315,7 @@ class AuthController extends Controller
     }
 
     /**
-     * 4. LOGOUT
+     * 7. LOGOUT
      */
     public function logout(Request $request)
     {
