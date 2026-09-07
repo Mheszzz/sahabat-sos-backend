@@ -27,10 +27,10 @@ return new class extends Migration
             $table->string('lokasi_user')->nullable();
             $table->enum('kategori_user', ['umum', 'tunarungu', 'tunanetra', 'tunawicara'])->default('umum');
             $table->string('status_ketersediaan')->nullable();
-            $table->string('catatan_medis')->nullable();
+            $table->text('catatan_medis')->nullable();
             $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
-            $table->rememberToken();
+            //$table->string('password');
+            //$table->rememberToken();
             $table->timestamps();
         });
 
@@ -55,8 +55,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('users');
     }
 };
