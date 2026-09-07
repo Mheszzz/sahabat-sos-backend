@@ -13,9 +13,11 @@ return new class extends Migration
     {
         Schema::create('s_o_s', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('id_pengguna')->constrained('users')->onDelete('cascade');
+            $table->foreignId('id_relawan')->nullable()->constrained('users')->onDelete('set null');
             $table->string('lokasi_sos');
-            $table->enum('status_sos',['aktif','selesai'])->default('aktif');
-            $table->time('waktu_sos');
+            $table->enum('status_sos', ['aktif', 'proses', 'selesai'])->default('aktif');
+            $table->timestamp('waktu_sos')->nullable();
             $table->timestamps();
         });
     }
