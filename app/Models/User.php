@@ -34,6 +34,12 @@ class User extends Authenticatable
         'kategori_user',
         'status_ketersediaan',
         'catatan_medis',
+        'latitude',
+        'longitude',
+        'last_located_at',
+        'status_verifikasi',
+        'persetujuan_privasi',
+        'waktu_persetujuan',
     ];
 
     /**
@@ -51,11 +57,30 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'getaran'       => 'boolean',
-            'talkback'      => 'boolean',
-            'panduan_suara' => 'boolean',
-            'text_besar'    => 'boolean',
+            'getaran'             => 'boolean',
+            'talkback'            => 'boolean',
+            'panduan_suara'       => 'boolean',
+            'text_besar'          => 'boolean',
+            'latitude'            => 'float',
+            'longitude'           => 'float',
+            'last_located_at'     => 'datetime',
+            'persetujuan_privasi' => 'boolean',
+            'waktu_persetujuan'   => 'datetime',
         ];
+    }
+
+    /**
+     * Scope query untuk mencari user/relawan terdekat berdasarkan latitude & longitude (Formula Haversine).
+     */
+    public function scopeNearby($query, float $latitude, float $longitude, float $radiusInKm = 5.0)
+    {
+        $haversine = "(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude))))";
+
+        return $query->selectRaw("*, {$haversine} AS distance", [$latitude, $longitude, $latitude])
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->whereRaw("{$haversine} <= ?", [$latitude, $longitude, $latitude, $radiusInKm])
+            ->orderByRaw("{$haversine} ASC", [$latitude, $longitude, $latitude]);
     }
 
     /**

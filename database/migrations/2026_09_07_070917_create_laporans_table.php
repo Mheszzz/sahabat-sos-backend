@@ -16,6 +16,8 @@ return new class extends Migration
             $table->foreignId('id_pengguna')->constrained('users')->onDelete('cascade');
             $table->foreignId('id_relawan')->nullable()->constrained('users')->onDelete('set null');
             $table->string('lokasi_laporan');
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
             $table->string('kategori_laporan');
             $table->text('deskripsi');
             $table->string('foto_laporan')->nullable();
