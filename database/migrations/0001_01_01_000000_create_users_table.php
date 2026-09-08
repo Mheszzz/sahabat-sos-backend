@@ -14,7 +14,6 @@ return new class extends Migration
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->string('email')->unique();
             $table->string('alamat')->nullable();
             $table->string('no_telp')->unique()->nullable();
             $table->enum('role', ['superadmin', 'admin', 'pengguna', 'relawan'])->default('pengguna');
@@ -28,9 +27,6 @@ return new class extends Migration
             $table->enum('kategori_user', ['umum', 'tunarungu', 'tunanetra', 'tunawicara'])->default('umum');
             $table->string('status_ketersediaan')->nullable();
             $table->text('catatan_medis')->nullable();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password')->nullable();
-            $table->rememberToken();
             $table->timestamps();
         });
 

@@ -12,15 +12,11 @@ use App\Models\Laporan;
 
 $pengguna = User::create([
     'name' => 'Pengguna Test',
-    'email' => 'pengguna@test.com',
-    'password' => bcrypt('123456'),
     'role' => 'pengguna'
 ]);
 
 $relawan = User::create([
     'name' => 'Relawan Test',
-    'email' => 'relawan@test.com',
-    'password' => bcrypt('123456'),
     'role' => 'relawan'
 ]);
 

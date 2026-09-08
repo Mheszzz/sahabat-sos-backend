@@ -5,6 +5,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 
 // Public Authentication Routes
+Route::post('/auth/register', [AuthController::class, 'register']);
+Route::post('/auth/login', [AuthController::class, 'login']);
 Route::get('/auth/google', [AuthController::class, 'redirectToGoogle']);
 Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
 Route::post('/auth/google/mobile', [AuthController::class, 'loginGoogleMobile']);
@@ -22,8 +24,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Logout
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // Route Khusus Pengguna
-    Route::middleware('role:pengguna')->group(function () {
+    // Route Khusus Pengguna & Relawan (Beranda)
+    Route::middleware('role:pengguna,relawan')->group(function () {
+        Route::get('/beranda', [AuthController::class, 'beranda']);
+        
         Route::get('/pengguna/profile', function (Request $request) {
             return response()->json(['user' => $request->user(), 'is_profile_complete' => $request->user()->isProfileComplete()]);
         });
@@ -36,13 +40,9 @@ Route::middleware('auth:sanctum')->group(function () {
         });
     });
 
-    // Route Khusus Admin & Superadmin
+    // Route Khusus Admin & Superadmin (Beranda Admin)
     Route::middleware('role:admin,superadmin')->group(function () {
-        Route::get('/admin/dashboard-stats', function (Request $request) {
-            return response()->json([
-                'message' => 'Selamat datang di Admin Dashboard',
-                'user'    => $request->user()
-            ]);
-        });
+        Route::get('/admin/beranda', [AuthController::class, 'berandaAdmin']);
+        Route::get('/admin/dashboard-stats', [AuthController::class, 'berandaAdmin']);
     });
 });

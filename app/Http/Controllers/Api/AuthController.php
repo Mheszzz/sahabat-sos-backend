@@ -59,18 +59,12 @@ class AuthController extends Controller
                     ], 403);
                 }
             } else {
-                // 2. Jika belum ada di accounts, cek apakah email sudah ada di tabel users
-                $user = User::where('email', $googleUser->getEmail())->first();
+                // 2. Jika belum ada di accounts untuk provider google, cek apakah email sudah ada di tabel accounts
+                $existingAccount = Account::where('email', $googleUser->getEmail())->first();
 
-                if (!$user) {
-                    // 3. Buat User baru jika belum terdaftar
-                    $user = User::create([
-                        'name'         => $googleUser->getName(),
-                        'email'        => $googleUser->getEmail(),
-                        'foto_profile' => $googleUser->getAvatar(),
-                        'role'         => $requestedRole,
-                    ]);
-                } else {
+                if ($existingAccount) {
+                    $user = $existingAccount->user;
+
                     if (!in_array($user->role, ['pengguna', 'relawan'])) {
                         return response()->json([
                             'message' => 'Akses ditolak. Email ini terdaftar sebagai Admin/Superadmin.'
@@ -82,6 +76,13 @@ class AuthController extends Controller
                             'message' => "Akses ditolak. Akun Anda terdaftar sebagai '{$user->role}', tidak bisa login di aplikasi '{$requestedRole}'."
                         ], 403);
                     }
+                } else {
+                    // 3. Buat User baru jika belum terdaftar
+                    $user = User::create([
+                        'name'         => $googleUser->getName(),
+                        'foto_profile' => $googleUser->getAvatar(),
+                        'role'         => $requestedRole,
+                    ]);
                 }
 
                 // 4. Tautkan Akun Google ke tabel accounts
@@ -165,23 +166,22 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // Cari user yang rolenya admin atau superadmin
-        $user = User::where('email', $request->email)->first();
-
-        if (!$user || !in_array($user->role, ['admin', 'superadmin'])) {
-            return response()->json([
-                'message' => 'Kredensial salah atau Anda tidak memiliki akses admin.'
-            ], 401);
-        }
-
-        // Cari kredensial lokal di tabel accounts
-        $account = Account::where('user_id', $user->id)
+        // Cari kredensial lokal di tabel accounts berdasarkan email
+        $account = Account::where('email', $request->email)
             ->where('provider', 'local')
             ->first();
 
         if (!$account || !Hash::check($request->password, $account->password)) {
             return response()->json([
                 'message' => 'Email atau password salah.'
+            ], 401);
+        }
+
+        $user = $account->user;
+
+        if (!$user || !in_array($user->role, ['admin', 'superadmin'])) {
+            return response()->json([
+                'message' => 'Kredensial salah atau Anda tidak memiliki akses admin.'
             ], 401);
         }
 
@@ -260,16 +260,11 @@ class AuthController extends Controller
                     ], 403);
                 }
             } else {
-                $user = User::where('email', $googleUser->getEmail())->first();
+                $existingAccount = Account::where('email', $googleUser->getEmail())->first();
 
-                if (!$user) {
-                    $user = User::create([
-                        'name'         => $googleUser->getName(),
-                        'email'        => $googleUser->getEmail(),
-                        'foto_profile' => $googleUser->getAvatar(),
-                        'role'         => $requestedRole,
-                    ]);
-                } else {
+                if ($existingAccount) {
+                    $user = $existingAccount->user;
+
                     if (!in_array($user->role, ['pengguna', 'relawan'])) {
                         return response()->json([
                             'message' => 'Akses ditolak. Email ini terdaftar sebagai Admin.'
@@ -281,6 +276,12 @@ class AuthController extends Controller
                             'message' => "Akses ditolak. Akun Anda terdaftar sebagai '{$user->role}', tidak bisa login di aplikasi '{$requestedRole}'."
                         ], 403);
                     }
+                } else {
+                    $user = User::create([
+                        'name'         => $googleUser->getName(),
+                        'foto_profile' => $googleUser->getAvatar(),
+                        'role'         => $requestedRole,
+                    ]);
                 }
 
                 Account::create([
@@ -312,6 +313,151 @@ class AuthController extends Controller
                 'error'   => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * REGISTRASI PENGGUNA & RELAWAN (Email & Password)
+     */
+    public function register(Request $request)
+    {
+        $request->validate([
+            'name'     => 'required|string|max:255',
+            'email'    => 'required|email',
+            'password' => 'required|string|min:6',
+            'role'     => 'required|in:pengguna,relawan',
+            'no_telp'  => 'nullable|string|max:20|unique:users,no_telp',
+            'alamat'   => 'nullable|string|max:255',
+        ]);
+
+        $existingAccount = Account::where('email', $request->email)->first();
+        if ($existingAccount) {
+            return response()->json([
+                'message' => 'Email sudah terdaftar. Silakan gunakan email lain atau login.'
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $user = User::create([
+                'name'    => $request->name,
+                'role'    => $request->role,
+                'no_telp' => $request->no_telp ?? null,
+                'alamat'  => $request->alamat ?? null,
+            ]);
+
+            Account::create([
+                'user_id'  => $user->id,
+                'provider' => 'local',
+                'email'    => $request->email,
+                'password' => $request->password,
+            ]);
+
+            DB::commit();
+
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            return response()->json([
+                'message'             => 'Registrasi berhasil',
+                'access_token'        => $token,
+                'token_type'          => 'Bearer',
+                'is_profile_complete' => $user->isProfileComplete(),
+                'user'                => $user,
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Gagal melakukan registrasi',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * LOGIN PENGGUNA & RELAWAN (Email & Password)
+     */
+    public function login(Request $request)
+    {
+        $request->validate([
+            'email'    => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        $account = Account::where('email', $request->email)
+            ->where('provider', 'local')
+            ->first();
+
+        if (!$account || !Hash::check($request->password, $account->password)) {
+            return response()->json([
+                'message' => 'Email atau password salah.'
+            ], 401);
+        }
+
+        $user = $account->user;
+
+        if (!$user || !in_array($user->role, ['pengguna', 'relawan'])) {
+            return response()->json([
+                'message' => 'Akses ditolak. Endpoint login ini khusus untuk Pengguna dan Relawan.'
+            ], 403);
+        }
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'message'             => 'Login berhasil',
+            'access_token'        => $token,
+            'token_type'          => 'Bearer',
+            'is_profile_complete' => $user->isProfileComplete(),
+            'user'                => $user,
+        ]);
+    }
+
+    /**
+     * BERANDA PENGGUNA & RELAWAN
+     */
+    public function beranda(Request $request)
+    {
+        $user = $request->user();
+
+        $activeSosCount = \App\Models\SOS::where('status_sos', 'aktif')->count();
+        $totalLaporanCount = \App\Models\Laporan::count();
+
+        return response()->json([
+            'message'             => 'Selamat datang di Beranda Sahabat SOS',
+            'user'                => $user,
+            'is_profile_complete' => $user->isProfileComplete(),
+            'summary'             => [
+                'active_sos'    => $activeSosCount,
+                'total_laporan' => $totalLaporanCount,
+            ]
+        ]);
+    }
+
+    /**
+     * BERANDA ADMIN & SUPERADMIN
+     */
+    public function berandaAdmin(Request $request)
+    {
+        $user = $request->user();
+
+        $totalUsers = User::where('role', 'pengguna')->count();
+        $totalRelawan = User::where('role', 'relawan')->count();
+        $totalAdmins = User::whereIn('role', ['admin', 'superadmin'])->count();
+        $activeSosCount = \App\Models\SOS::where('status_sos', 'aktif')->count();
+        $totalLaporanCount = \App\Models\Laporan::count();
+
+        return response()->json([
+            'message' => 'Selamat datang di Beranda Admin Sahabat SOS',
+            'user'    => $user,
+            'stats'   => [
+                'total_pengguna' => $totalUsers,
+                'total_relawan'  => $totalRelawan,
+                'total_admin'    => $totalAdmins,
+                'active_sos'     => $activeSosCount,
+                'total_laporan'  => $totalLaporanCount,
+            ]
+        ]);
     }
 
     /**

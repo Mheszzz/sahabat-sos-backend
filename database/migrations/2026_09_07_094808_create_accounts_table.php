@@ -14,10 +14,12 @@ return new class extends Migration
         Schema::create('accounts', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
-            $table->string('provider'); 
+            $table->string('provider')->default('local'); 
             $table->string('provider_id')->nullable(); 
             $table->string('email');
+            $table->timestamp('email_verified_at')->nullable();
             $table->string('password')->nullable(); 
+            $table->rememberToken();
             $table->timestamps();
             $table->unique(['provider', 'email']);
         });

@@ -13,15 +13,18 @@ class Account extends Model
         'provider',
         'provider_id',
         'email',
+        'email_verified_at',
         'password',
     ];
 
     protected $hidden = [
         'password',
+        'remember_token',
     ];
 
     protected $casts = [
-        'password' => 'hashed',
+        'email_verified_at' => 'datetime',
+        'password'          => 'hashed',
     ];
 
     /**

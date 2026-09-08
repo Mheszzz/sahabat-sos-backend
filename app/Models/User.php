@@ -21,8 +21,6 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
-        'email',
-        'password',
         'alamat',
         'no_telp',
         'role',
@@ -43,10 +41,7 @@ class User extends Authenticatable
      *
      * @var list<string>
      */
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
+    protected $hidden = [];
 
     /**
      * Get the attributes that should be cast.
@@ -56,12 +51,10 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password'          => 'hashed',
-            'getaran'           => 'boolean',
-            'talkback'          => 'boolean',
-            'panduan_suara'     => 'boolean',
-            'text_besar'        => 'boolean',
+            'getaran'       => 'boolean',
+            'talkback'      => 'boolean',
+            'panduan_suara' => 'boolean',
+            'text_besar'    => 'boolean',
         ];
     }
 

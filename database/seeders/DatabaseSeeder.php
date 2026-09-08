@@ -18,39 +18,37 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // 1. Seed Superadmin Account
-        $superadmin = User::firstOrCreate(
-            ['email' => 'superadmin@sahabatsos.com'],
-            [
+        $superadminAccount = Account::where('email', 'superadmin@sahabatsos.com')->where('provider', 'local')->first();
+        if (!$superadminAccount) {
+            $superadmin = User::create([
                 'name' => 'Super Admin',
                 'role' => 'superadmin',
-            ]
-        );
+            ]);
 
-        Account::firstOrCreate(
-            ['user_id' => $superadmin->id, 'provider' => 'local'],
-            [
+            Account::create([
+                'user_id'  => $superadmin->id,
+                'provider' => 'local',
                 'email'    => 'superadmin@sahabatsos.com',
                 'password' => Hash::make('password123'),
-            ]
-        );
+            ]);
+        }
 
         // 2. Seed Admin Account
-        $admin = User::firstOrCreate(
-            ['email' => 'admin@sahabatsos.com'],
-            [
+        $adminAccount = Account::where('email', 'admin@sahabatsos.com')->where('provider', 'local')->first();
+        if (!$adminAccount) {
+            $admin = User::create([
                 'name'    => 'Admin Utama',
                 'role'    => 'admin',
                 'alamat'  => 'Kantor Pusat Sahabat SOS',
                 'no_telp' => '081234567890',
-            ]
-        );
+            ]);
 
-        Account::firstOrCreate(
-            ['user_id' => $admin->id, 'provider' => 'local'],
-            [
+            Account::create([
+                'user_id'  => $admin->id,
+                'provider' => 'local',
                 'email'    => 'admin@sahabatsos.com',
                 'password' => Hash::make('password123'),
-            ]
-        );
+            ]);
+        }
     }
 }
