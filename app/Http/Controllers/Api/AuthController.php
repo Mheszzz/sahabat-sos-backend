@@ -118,7 +118,7 @@ class AuthController extends Controller
                 'error'   => $e->getMessage()
             ], 500);
         }
-    }
+}
 
     /**
      * 2. LENGKAPI PROFIL (Pengguna & Relawan Baru)
@@ -127,9 +127,9 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        if (!in_array($user->role, ['pengguna', 'relawan'])) {
+        if (!in_array($user->role, ['pengguna'])) {
             return response()->json([
-                'message' => 'Layanan ini hanya untuk Pengguna dan Relawan.'
+                'message' => 'Layanan ini hanya untuk Pengguna.'
             ], 403);
         }
 
