@@ -14,24 +14,25 @@ return new class extends Migration
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->string('email')->unique();
-            $table->string('alamat');
-            $table->string('no_telp')->unique();
-            $table->string('role');
-            $table->string('device_id')->unique();
-            $table->string('foto_profile');
+            $table->string('alamat')->nullable();
+            $table->string('no_telp')->unique()->nullable();
+            $table->enum('role', ['superadmin', 'admin', 'pengguna', 'relawan'])->default('pengguna');
+            $table->string('device_id')->unique()->nullable();
+            $table->string('foto_profile')->nullable();
             $table->boolean('getaran')->default(false);
             $table->boolean('talkback')->default(false);
             $table->boolean('panduan_suara')->default(false);
             $table->boolean('text_besar')->default(false);
             $table->string('lokasi_user')->nullable();
-            $table->enum('kategori_user',['umum','tunarungu','tunanetra','tunawicara']);
-            $table->string('catatan_medis')->nullable();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
-            $table->rememberToken();
+            $table->enum('kategori_user', ['umum', 'tunarungu', 'tunanetra', 'tunawicara'])->default('umum');
+            $table->string('status_ketersediaan')->nullable();
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
+            $table->timestamp('last_located_at')->nullable();
+            $table->enum('status_verifikasi', ['pending', 'terverifikasi', 'ditolak'])->default('terverifikasi');
+            $table->boolean('persetujuan_privasi')->default(false);
+            $table->timestamp('waktu_persetujuan')->nullable();
             $table->timestamps();
-            
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
@@ -55,8 +56,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('users');
     }
 };

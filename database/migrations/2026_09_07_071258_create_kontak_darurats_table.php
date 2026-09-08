@@ -13,10 +13,11 @@ return new class extends Migration
     {
         Schema::create('kontak_darurats', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('id_pengguna')->constrained('users')->onDelete('cascade');
             $table->string('nama');
-            $table->id('pesan');
-            $table->id('no_telp');
-            $table->boolean('terima_notif');
+            $table->string('no_telp');
+            $table->text('pesan')->nullable();
+            $table->boolean('terima_notif')->default(true);
             $table->timestamps();
         });
     }

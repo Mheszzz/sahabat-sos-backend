@@ -13,12 +13,17 @@ return new class extends Migration
     {
         Schema::create('laporans', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('id_pengguna')->constrained('users')->onDelete('cascade');
+            $table->foreignId('id_relawan')->nullable()->constrained('users')->onDelete('set null');
             $table->string('lokasi_laporan');
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
             $table->string('kategori_laporan');
-            $table->string('deskripsi');
-            $table->string('foto_laporan');
-            $table->enum('status',['aktif','selesai'])->default('aktif');
-            $table->string('rekam_suara');
+            $table->text('deskripsi');
+            $table->string('foto_laporan')->nullable();
+            $table->string('rekam_suara')->nullable();
+            $table->enum('status', ['aktif', 'proses', 'selesai'])->default('aktif');
+            $table->timestamp('waktu_laporan')->nullable();
             $table->timestamps();
         });
     }
