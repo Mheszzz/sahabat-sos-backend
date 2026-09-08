@@ -348,6 +348,7 @@ class AuthController extends Controller
                 'role'                => $request->role,
                 'no_telp'             => $request->no_telp ?? null,
                 'alamat'              => $request->alamat ?? null,
+                'status_verifikasi'   => $request->role === 'relawan' ? 'pending' : 'terverifikasi',
                 'persetujuan_privasi' => true,
                 'waktu_persetujuan'   => now(),
             ]);
@@ -463,6 +464,74 @@ class AuthController extends Controller
                 'active_sos'     => $activeSosCount,
                 'total_laporan'  => $totalLaporanCount,
             ]
+        ]);
+    }
+
+    /**
+     * PEMBARUAN LOKASI GPS TERKINI (POST /api/user/update-location)
+     */
+    public function updateLocation(Request $request)
+    {
+        $validated = $request->validate([
+            'latitude'            => 'required|numeric|between:-90,90',
+            'longitude'           => 'required|numeric|between:-180,180',
+            'lokasi_user'         => 'nullable|string|max:255',
+            'status_ketersediaan' => 'nullable|string|max:255',
+        ]);
+
+        $user = $request->user();
+        $user->update([
+            'latitude'            => $validated['latitude'],
+            'longitude'           => $validated['longitude'],
+            'lokasi_user'         => $validated['lokasi_user'] ?? $user->lokasi_user,
+            'status_ketersediaan' => $validated['status_ketersediaan'] ?? $user->status_ketersediaan,
+            'last_located_at'     => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Lokasi GPS berhasil diperbarui',
+            'user'    => $user->refresh(),
+        ]);
+    }
+
+    /**
+     * AMBIL DAFTAR RELAWAN PENDING VERIFIKASI (Khusus Admin & Superadmin)
+     */
+    public function getPendingRelawan(Request $request)
+    {
+        $relawans = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'pending')
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'message' => 'Berhasil mengambil daftar relawan pending verifikasi',
+            'total'   => $relawans->count(),
+            'data'    => $relawans,
+        ]);
+    }
+
+    /**
+     * VERIFIKASI / APPROVE AKUN RELAWAN (Khusus Admin & Superadmin)
+     */
+    public function verifikasiRelawan($id, Request $request)
+    {
+        $request->validate([
+            'status_verifikasi' => 'required|in:terverifikasi,ditolak',
+        ]);
+
+        $relawan = User::where('role', 'relawan')->find($id);
+        if (!$relawan) {
+            return response()->json(['message' => 'Akun relawan tidak ditemukan'], 404);
+        }
+
+        $relawan->update([
+            'status_verifikasi' => $request->status_verifikasi,
+        ]);
+
+        return response()->json([
+            'message' => "Status verifikasi relawan {$relawan->name} berhasil diubah menjadi {$request->status_verifikasi}",
+            'user'    => $relawan,
         ]);
     }
 

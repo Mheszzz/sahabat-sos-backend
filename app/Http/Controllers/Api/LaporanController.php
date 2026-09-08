@@ -103,6 +103,9 @@ class LaporanController extends Controller
         $validator = Validator::make($request->all(), [
             'kategori_laporan'    => 'required|string|max:255',
             'lokasi_laporan'      => 'required|string|max:255',
+            'latitude'            => 'nullable|numeric|between:-90,90',
+            'longitude'           => 'nullable|numeric|between:-180,180',
+            'radius'              => 'nullable|numeric|min:0.1|max:50',
             'deskripsi'           => 'nullable|string',
             'pesan_cepat'         => 'nullable',
             'keterangan_tambahan' => 'nullable|string',
@@ -152,10 +155,15 @@ class LaporanController extends Controller
             $audioPath = $request->file('rekam_suara')->store('laporan/audio', 'public');
         }
 
+        $latitude = $request->input('latitude');
+        $longitude = $request->input('longitude');
+
         $laporan = Laporan::create([
             'id_pengguna'      => $request->user()->id,
             'id_relawan'       => null,
             'lokasi_laporan'   => $request->lokasi_laporan,
+            'latitude'         => $latitude,
+            'longitude'        => $longitude,
             'kategori_laporan' => $request->kategori_laporan,
             'deskripsi'        => $finalDeskripsi,
             'foto_laporan'     => $fotoPath,
@@ -163,6 +171,32 @@ class LaporanController extends Controller
             'status'           => 'aktif',
             'waktu_laporan'    => now(),
         ]);
+
+        // Cari relawan terdekat dalam radius (default 5.0 KM)
+        $radiusInKm = (float) $request->input('radius', 5.0);
+        $nearbyVolunteers = collect();
+
+        if ($latitude !== null && $longitude !== null) {
+            $nearbyVolunteers = \App\Models\User::where('role', 'relawan')
+                ->where(function ($q) {
+                    $q->whereNull('status_ketersediaan')
+                      ->orWhere('status_ketersediaan', 'tersedia');
+                })
+                ->nearby((float)$latitude, (float)$longitude, $radiusInKm)
+                ->get()
+                ->map(function ($vol) {
+                    return [
+                        'id'           => $vol->id,
+                        'name'         => $vol->name,
+                        'no_telp'      => $vol->no_telp,
+                        'distance_km'  => round((float)$vol->distance, 2),
+                        'device_id'    => $vol->device_id,
+                    ];
+                });
+        }
+
+        // Broadcast Real-Time Event WebSocket / Notifikasi
+        event(new \App\Events\LaporanCreated($laporan, $nearbyVolunteers->count()));
 
         $laporan->load(['pengguna']);
         if ($laporan->foto_laporan) {
@@ -173,13 +207,64 @@ class LaporanController extends Controller
         }
 
         return response()->json([
-            'message' => 'Laporan berhasil terkirim! Tim relawan akan segera merespon.',
-            'data'    => $laporan,
+            'message'                 => "Laporan berhasil terkirim! Relawan terdekat (radius {$radiusInKm} KM) telah dinotifikasi secara real-time.",
+            'data'                    => $laporan,
+            'radius_km'               => $radiusInKm,
+            'nearby_volunteers_count' => $nearbyVolunteers->count(),
+            'nearby_volunteers'       => $nearbyVolunteers,
         ], 201);
     }
 
     /**
-     * 4. DETAIL LAPORAN (GET /api/laporan/{id})
+     * 4. DAFTAR LAPORAN TERDEKAT UNTUK RELAWAN (GET /api/laporan/nearby)
+     * Mengambil laporan aktif di sekitar posisi relawan berdasarkan latitude, longitude, dan radius KM.
+     */
+    public function nearby(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'latitude'  => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+            'radius'    => 'nullable|numeric|min:0.1|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validasi gagal. Latitude & Longitude diperlukan.',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $latitude = (float)$request->latitude;
+        $longitude = (float)$request->longitude;
+        $radius = (float)$request->input('radius', 5.0);
+
+        $laporans = Laporan::with(['pengguna', 'relawan'])
+            ->where('status', 'aktif')
+            ->nearby($latitude, $longitude, $radius)
+            ->get()
+            ->transform(function ($item) {
+                $item->distance_km = round((float)$item->distance, 2);
+                if ($item->foto_laporan) {
+                    $item->foto_laporan_url = url('storage/' . $item->foto_laporan);
+                }
+                if ($item->rekam_suara) {
+                    $item->rekam_suara_url = url('storage/' . $item->rekam_suara);
+                }
+                return $item;
+            });
+
+        return response()->json([
+            'message'          => "Berhasil mengambil laporan aktif dalam radius {$radius} KM",
+            'user_latitude'    => $latitude,
+            'user_longitude'   => $longitude,
+            'radius_km'        => $radius,
+            'total_found'      => $laporans->count(),
+            'data'             => $laporans,
+        ]);
+    }
+
+    /**
+     * 5. DETAIL LAPORAN (GET /api/laporan/{id})
      */
     public function show($id, Request $request)
     {
@@ -208,7 +293,7 @@ class LaporanController extends Controller
     }
 
     /**
-     * 5. UPDATE STATUS LAPORAN (PUT/PATCH /api/laporan/{id}/status)
+     * 6. UPDATE STATUS LAPORAN (PUT/PATCH /api/laporan/{id}/status)
      * Khusus Relawan / Admin untuk menanggapi atau menyelesaikan laporan.
      */
     public function updateStatus($id, Request $request)

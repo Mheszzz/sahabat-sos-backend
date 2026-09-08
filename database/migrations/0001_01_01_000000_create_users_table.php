@@ -26,7 +26,10 @@ return new class extends Migration
             $table->string('lokasi_user')->nullable();
             $table->enum('kategori_user', ['umum', 'tunarungu', 'tunanetra', 'tunawicara'])->default('umum');
             $table->string('status_ketersediaan')->nullable();
-            $table->text('catatan_medis')->nullable();
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
+            $table->timestamp('last_located_at')->nullable();
+            $table->enum('status_verifikasi', ['pending', 'terverifikasi', 'ditolak'])->default('terverifikasi');
             $table->boolean('persetujuan_privasi')->default(false);
             $table->timestamp('waktu_persetujuan')->nullable();
             $table->timestamps();

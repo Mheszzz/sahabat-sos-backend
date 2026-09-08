@@ -12,6 +12,8 @@ class Laporan extends Model
         'id_pengguna',
         'id_relawan',
         'lokasi_laporan',
+        'latitude',
+        'longitude',
         'kategori_laporan',
         'deskripsi',
         'foto_laporan',
@@ -19,6 +21,26 @@ class Laporan extends Model
         'rekam_suara',
         'waktu_laporan',
     ];
+
+    protected $casts = [
+        'latitude'      => 'float',
+        'longitude'     => 'float',
+        'waktu_laporan' => 'datetime',
+    ];
+
+    /**
+     * Scope query untuk mencari laporan terdekat berdasarkan koordinat pengguna/relawan.
+     */
+    public function scopeNearby($query, float $latitude, float $longitude, float $radiusInKm = 5.0)
+    {
+        $haversine = "(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude))))";
+
+        return $query->selectRaw("*, {$haversine} AS distance", [$latitude, $longitude, $latitude])
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->whereRaw("{$haversine} <= ?", [$latitude, $longitude, $latitude, $radiusInKm])
+            ->orderByRaw("{$haversine} ASC", [$latitude, $longitude, $latitude]);
+    }
 
     /**
      * Relasi ke User (Pengguna yang membuat Laporan)
