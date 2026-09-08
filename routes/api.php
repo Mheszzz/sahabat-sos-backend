@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\LaporanController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -23,6 +24,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Logout
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // Laporan Endpoints (Kirim Laporan Cepat, List, Detail, Update Status)
+    Route::get('/laporan/options', [LaporanController::class, 'getOptions']);
+    Route::get('/laporan', [LaporanController::class, 'index']);
+    Route::post('/laporan', [LaporanController::class, 'store']);
+    Route::get('/laporan/{id}', [LaporanController::class, 'show']);
+    Route::put('/laporan/{id}/status', [LaporanController::class, 'updateStatus']);
 
     // Route Khusus Pengguna & Relawan (Beranda)
     Route::middleware('role:pengguna,relawan')->group(function () {
