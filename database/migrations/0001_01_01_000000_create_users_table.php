@@ -27,6 +27,8 @@ return new class extends Migration
             $table->enum('kategori_user', ['umum', 'tunarungu', 'tunanetra', 'tunawicara'])->default('umum');
             $table->string('status_ketersediaan')->nullable();
             $table->text('catatan_medis')->nullable();
+            $table->boolean('persetujuan_privasi')->default(false);
+            $table->timestamp('waktu_persetujuan')->nullable();
             $table->timestamps();
         });
 

@@ -34,6 +34,8 @@ class User extends Authenticatable
         'kategori_user',
         'status_ketersediaan',
         'catatan_medis',
+        'persetujuan_privasi',
+        'waktu_persetujuan',
     ];
 
     /**
@@ -51,10 +53,12 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'getaran'       => 'boolean',
-            'talkback'      => 'boolean',
-            'panduan_suara' => 'boolean',
-            'text_besar'    => 'boolean',
+            'getaran'             => 'boolean',
+            'talkback'            => 'boolean',
+            'panduan_suara'       => 'boolean',
+            'text_besar'          => 'boolean',
+            'persetujuan_privasi' => 'boolean',
+            'waktu_persetujuan'   => 'datetime',
         ];
     }
 

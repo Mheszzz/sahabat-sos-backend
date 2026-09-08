@@ -321,12 +321,16 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email',
-            'password' => 'required|string|min:6',
-            'role'     => 'required|in:pengguna,relawan',
-            'no_telp'  => 'nullable|string|max:20|unique:users,no_telp',
-            'alamat'   => 'nullable|string|max:255',
+            'name'                => 'required|string|max:255',
+            'email'               => 'required|email',
+            'password'            => 'required|string|min:6',
+            'role'                => 'required|in:pengguna,relawan',
+            'persetujuan_privasi' => 'required|accepted',
+            'no_telp'             => 'nullable|string|max:20|unique:users,no_telp',
+            'alamat'              => 'nullable|string|max:255',
+        ], [
+            'persetujuan_privasi.required' => 'Anda harus menyetujui syarat & ketentuan penggunaan data pribadi dan medis untuk mendaftar.',
+            'persetujuan_privasi.accepted' => 'Anda harus menyetujui syarat & ketentuan penggunaan data pribadi dan medis untuk mendaftar.',
         ]);
 
         $existingAccount = Account::where('email', $request->email)->first();
@@ -340,10 +344,12 @@ class AuthController extends Controller
             DB::beginTransaction();
 
             $user = User::create([
-                'name'    => $request->name,
-                'role'    => $request->role,
-                'no_telp' => $request->no_telp ?? null,
-                'alamat'  => $request->alamat ?? null,
+                'name'                => $request->name,
+                'role'                => $request->role,
+                'no_telp'             => $request->no_telp ?? null,
+                'alamat'              => $request->alamat ?? null,
+                'persetujuan_privasi' => true,
+                'waktu_persetujuan'   => now(),
             ]);
 
             Account::create([

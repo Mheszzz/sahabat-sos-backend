@@ -12,18 +12,35 @@ use App\Http\Controllers\Api\AuthController;
 
 $controller = new AuthController();
 
-// 1. Test Register
-$reqRegister = Request::create('/api/auth/register', 'POST', [
-    'name' => 'Budi Test',
-    'email' => 'budi@test.com',
+// 1a. Test Register Without Consent (Should Fail with 422)
+$reqNoConsent = Request::create('/api/auth/register', 'POST', [
+    'name'     => 'Budi No Consent',
+    'email'    => 'budinoconsent@test.com',
     'password' => 'password123',
-    'role' => 'pengguna',
-    'no_telp' => '089876543210',
+    'role'     => 'pengguna',
+]);
+
+try {
+    $resNoConsent = $controller->register($reqNoConsent);
+    echo "Register No Consent Status: " . $resNoConsent->getStatusCode() . "\n";
+    echo "Register No Consent JSON: " . $resNoConsent->getContent() . "\n\n";
+} catch (\Illuminate\Validation\ValidationException $e) {
+    echo "Register No Consent Validation Caught (422): " . json_encode($e->errors()) . "\n\n";
+}
+
+// 1b. Test Register With Consent (Should Succeed with 201)
+$reqRegister = Request::create('/api/auth/register', 'POST', [
+    'name'                => 'Budi Test',
+    'email'               => 'budi@test.com',
+    'password'            => 'password123',
+    'role'                => 'pengguna',
+    'persetujuan_privasi' => true,
+    'no_telp'             => '089876543210',
 ]);
 
 $resRegister = $controller->register($reqRegister);
-echo "Register Response Status: " . $resRegister->getStatusCode() . "\n";
-echo "Register Response JSON: " . $resRegister->getContent() . "\n\n";
+echo "Register With Consent Response Status: " . $resRegister->getStatusCode() . "\n";
+echo "Register With Consent Response JSON: " . $resRegister->getContent() . "\n\n";
 
 // 2. Test Login
 $reqLogin = Request::create('/api/auth/login', 'POST', [
