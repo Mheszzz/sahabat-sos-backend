@@ -30,8 +30,10 @@ class User extends Authenticatable
         'talkback',
         'panduan_suara',
         'text_besar',
+        'kontras_tinggi',
         'lokasi_user',
         'kategori_user',
+        'metode_komunikasi',
         'status_ketersediaan',
         'catatan_medis',
         'latitude',
@@ -61,12 +63,29 @@ class User extends Authenticatable
             'talkback'            => 'boolean',
             'panduan_suara'       => 'boolean',
             'text_besar'          => 'boolean',
+            'kontras_tinggi'      => 'boolean',
             'latitude'            => 'float',
             'longitude'           => 'float',
             'last_located_at'     => 'datetime',
             'persetujuan_privasi' => 'boolean',
             'waktu_persetujuan'   => 'datetime',
         ];
+    }
+
+    /**
+     * Accessor untuk foto_profile_url
+     */
+    public function getFotoProfileUrlAttribute(): ?string
+    {
+        if (!$this->foto_profile) {
+            return null;
+        }
+
+        if (str_starts_with($this->foto_profile, 'http://') || str_starts_with($this->foto_profile, 'https://')) {
+            return $this->foto_profile;
+        }
+
+        return url('storage/' . $this->foto_profile);
     }
 
     /**
