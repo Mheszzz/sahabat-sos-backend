@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\LaporanController;
+use App\Http\Controllers\Api\ProfilePenggunaController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -34,13 +35,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/laporan/{id}', [LaporanController::class, 'show']);
     Route::put('/laporan/{id}/status', [LaporanController::class, 'updateStatus']);
 
-    // Route Khusus Pengguna & Relawan (Beranda)
+    // Route Khusus Pengguna & Relawan (Beranda & CRUD Profile)
     Route::middleware('role:pengguna,relawan')->group(function () {
         Route::get('/beranda', [AuthController::class, 'beranda']);
         
-        Route::get('/pengguna/profile', function (Request $request) {
-            return response()->json(['user' => $request->user(), 'is_profile_complete' => $request->user()->isProfileComplete()]);
-        });
+        // CRUD Profil Pengguna (Nama, Foto, Kategori, Kontak, Aksesibilitas, Metode Komunikasi)
+        Route::get('/pengguna/profile', [ProfilePenggunaController::class, 'show']);
+        Route::put('/pengguna/profile', [ProfilePenggunaController::class, 'update']);
+        Route::post('/pengguna/profile', [ProfilePenggunaController::class, 'update']); // Untuk Multipart Form-Data (Upload Foto)
+        Route::post('/pengguna/profile/foto', [ProfilePenggunaController::class, 'uploadFoto']);
+        Route::delete('/pengguna/profile/foto', [ProfilePenggunaController::class, 'destroyFoto']);
     });
 
     // Route Khusus Relawan

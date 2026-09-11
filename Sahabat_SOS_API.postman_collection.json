@@ -1,0 +1,737 @@
+{
+	"info": {
+		"_postman_id": "sahabat-sos-api-collection",
+		"name": "Sahabat SOS API Documentation",
+		"description": "Dokumentasi Lengkap API Backend Sahabat SOS (Auth, Pengguna, Relawan, Admin, & Laporan Cepat).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Autentikasi (Auth)",
+			"item": [
+				{
+					"name": "Registrasi (Pengguna / Relawan)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Budi Santoso\",\n  \"email\": \"budi@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"pengguna\",\n  \"persetujuan_privasi\": true,\n  \"no_telp\": \"081298765432\",\n  \"alamat\": \"Jl. Merdeka No. 45, Jakarta\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "register"]
+						},
+						"description": "Mendaftarkan akun baru untuk role 'pengguna' atau 'relawan'. Wajib menyetujui persetujuan_privasi."
+					}
+				},
+				{
+					"name": "Login (Pengguna / Relawan)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"budi@example.com\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "login"]
+						},
+						"description": "Login menggunakan Email & Password khusus Pengguna dan Relawan."
+					}
+				},
+				{
+					"name": "Login Google Mobile",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"GOOGLE_ID_TOKEN_FROM_FLUTTER\",\n  \"role\": \"pengguna\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/google/mobile",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "google", "mobile"]
+						},
+						"description": "Verifikasi & Login menggunakan Google ID Token dari aplikasi Mobile."
+					}
+				},
+				{
+					"name": "Login Admin / Superadmin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@sahabatsos.com\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/admin/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "admin", "login"]
+						},
+						"description": "Login khusus Admin dan Superadmin untuk Web React Dashboard."
+					}
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/logout",
+							"host": ["{{base_url}}"],
+							"path": ["api", "logout"]
+						},
+						"description": "Menghapus token autentikasi Sanctum saat ini."
+					}
+				}
+			]
+		},
+		{
+			"name": "2. User Profil & Lokasi",
+			"item": [
+				{
+					"name": "Get Current User Profile (Me)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/user/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "user", "me"]
+						},
+						"description": "Mengambil data detail pengguna yang sedang login beserta status kelengkapan profil."
+					}
+				},
+				{
+					"name": "Lengkapi Profil",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"alamat\": \"Jl. Sudirman No. 12, Jakarta\",\n  \"no_telp\": \"081234567890\",\n  \"kategori_user\": \"tunarungu\",\n  \"catatan_medis\": \"Riwayat asma, butuh pendamping saat darurat.\",\n  \"getaran\": true,\n  \"talkback\": false,\n  \"panduan_suara\": true,\n  \"text_besar\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/user/complete-profile",
+							"host": ["{{base_url}}"],
+							"path": ["api", "user", "complete-profile"]
+						},
+						"description": "Melengkapi profil pengguna disabilitas / umum / relawan."
+					}
+				},
+				{
+					"name": "Update Lokasi GPS Terkini",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"latitude\": -6.2088,\n  \"longitude\": 106.8456,\n  \"lokasi_user\": \"Jakarta Pusat\",\n  \"status_ketersediaan\": \"tersedia\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/user/update-location",
+							"host": ["{{base_url}}"],
+							"path": ["api", "user", "update-location"]
+						},
+						"description": "Mengirimkan koordinat latitude & longitude terkini pengguna/relawan ke server."
+					}
+				},
+				{
+					"name": "Tampilkan Profil Pengguna (ProfilePenggunaController)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/pengguna/profile",
+							"host": ["{{base_url}}"],
+							"path": ["api", "pengguna", "profile"]
+						},
+						"description": "Melihat detail profil pengguna termasuk foto_profile_url, nama, kategori_user, no_telp, alamat, pengaturan aksesibilitas, dan metode komunikasi pilihan."
+					}
+				},
+				{
+					"name": "Update Profil Pengguna (ProfilePenggunaController)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"nama\": \"Budi Santoso Updated\",\n  \"kategori_user\": \"tunarungu\",\n  \"no_telp\": \"081298765432\",\n  \"alamat\": \"Jl. Merdeka Barat No. 10, Jakarta Pusat\",\n  \"talkback\": true,\n  \"ukuran_teks\": true,\n  \"getaran\": true,\n  \"mode_kontras_sangat_tinggi\": true,\n  \"metode_komunikasi_pilihan\": \"pesan_suara_audio\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/pengguna/profile",
+							"host": ["{{base_url}}"],
+							"path": ["api", "pengguna", "profile"]
+						},
+						"description": "Mengubah nama, kategori disabilitas, telepon, alamat, opsi aksesibilitas (talkback, ukuran_teks, getaran, mode_kontras_sangat_tinggi), serta metode_komunikasi_pilihan."
+					}
+				},
+				{
+					"name": "Upload Foto Profil (ProfilePenggunaController)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "foto_profile",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/pengguna/profile/foto",
+							"host": ["{{base_url}}"],
+							"path": ["api", "pengguna", "profile", "foto"]
+						},
+						"description": "Upload atau perbarui foto profil pengguna (Multipart Form-Data)."
+					}
+				},
+				{
+					"name": "Hapus Foto Profil (ProfilePenggunaController)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/pengguna/profile/foto",
+							"host": ["{{base_url}}"],
+							"path": ["api", "pengguna", "profile", "foto"]
+						},
+						"description": "Menghapus foto profil pengguna."
+					}
+				}
+			]
+		},
+		{
+			"name": "3. Laporan (Reports)",
+			"item": [
+				{
+					"name": "Get Options Kategori & Pesan Cepat",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/laporan/options",
+							"host": ["{{base_url}}"],
+							"path": ["api", "laporan", "options"]
+						},
+						"description": "Mengambil template opsi kategori laporan dan preset pesan cepat untuk form UI."
+					}
+				},
+				{
+					"name": "Kirim Laporan Cepat (Store)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "kategori_laporan",
+									"value": "butuh_pendamping",
+									"type": "text"
+								},
+								{
+									"key": "lokasi_laporan",
+									"value": "Stasiun Manggarai, Jakarta Pusat",
+									"type": "text"
+								},
+								{
+									"key": "latitude",
+									"value": "-6.2098",
+									"type": "text"
+								},
+								{
+									"key": "longitude",
+									"value": "106.8490",
+									"type": "text"
+								},
+								{
+									"key": "radius",
+									"value": "5.0",
+									"type": "text"
+								},
+								{
+									"key": "deskripsi",
+									"value": "Saya butuh pendamping untuk menyeberang jalan dan bantuan mobilitas.",
+									"type": "text"
+								},
+								{
+									"key": "foto_laporan",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "rekam_suara",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/laporan",
+							"host": ["{{base_url}}"],
+							"path": ["api", "laporan"]
+						},
+						"description": "Mengirimkan laporan darurat baru. Mendukung upload foto (image) & rekam suara (audio)."
+					}
+				},
+				{
+					"name": "Daftar Laporan Terdekat (Relawan)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/laporan/nearby?latitude=-6.2088&longitude=106.8456&radius=5.0",
+							"host": ["{{base_url}}"],
+							"path": ["api", "laporan", "nearby"],
+							"query": [
+								{
+									"key": "latitude",
+									"value": "-6.2088"
+								},
+								{
+									"key": "longitude",
+									"value": "106.8456"
+								},
+								{
+									"key": "radius",
+									"value": "5.0"
+								}
+							]
+						},
+						"description": "Digunakan relawan untuk mencari laporan aktif disekitarnya berdasarkan koordinat GPS dan radius (KM)."
+					}
+				},
+				{
+					"name": "Daftar Seluruh Laporan",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/laporan?status=aktif",
+							"host": ["{{base_url}}"],
+							"path": ["api", "laporan"],
+							"query": [
+								{
+									"key": "status",
+									"value": "aktif"
+								}
+							]
+						},
+						"description": "Melihat daftar laporan (Pengguna: milik sendiri, Relawan/Admin: seluruh laporan)."
+					}
+				},
+				{
+					"name": "Detail Laporan",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/laporan/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "laporan", "1"]
+						},
+						"description": "Melihat detail lengkap satu laporan berdasarkan ID."
+					}
+				},
+				{
+					"name": "Update Status Laporan (Relawan/Admin)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"proses\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/laporan/1/status",
+							"host": ["{{base_url}}"],
+							"path": ["api", "laporan", "1", "status"]
+						},
+						"description": "Memperbarui status laporan (aktif / proses / selesai). Khusus Relawan dan Admin."
+					}
+				}
+			]
+		},
+		{
+			"name": "4. Admin Dashboard & Verifikasi",
+			"item": [
+				{
+					"name": "Beranda Admin & Stats Dashboard",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/beranda",
+							"host": ["{{base_url}}"],
+							"path": ["api", "admin", "beranda"]
+						},
+						"description": "Statistik utama platform Sahabat SOS untuk Web Dashboard Admin."
+					}
+				},
+				{
+					"name": "Daftar Relawan Pending Verifikasi",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/relawan/pending",
+							"host": ["{{base_url}}"],
+							"path": ["api", "admin", "relawan", "pending"]
+						},
+						"description": "Melihat daftar akun relawan yang mendaftar dan menunggu verifikasi admin."
+					}
+				},
+				{
+					"name": "Verifikasi / Approve Akun Relawan",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status_verifikasi\": \"terverifikasi\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/admin/relawan/2/verifikasi",
+							"host": ["{{base_url}}"],
+							"path": ["api", "admin", "relawan", "2", "verifikasi"]
+						},
+						"description": "Mengubah status verifikasi relawan (terverifikasi / ditolak)."
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://127.0.0.1:8000",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
