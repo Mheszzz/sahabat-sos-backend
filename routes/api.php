@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\LaporanController;
 use App\Http\Controllers\Api\ProfilePenggunaController;
+use App\Http\Controllers\Api\SOSController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -34,6 +35,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/laporan', [LaporanController::class, 'store']);
     Route::get('/laporan/{id}', [LaporanController::class, 'show']);
     Route::put('/laporan/{id}/status', [LaporanController::class, 'updateStatus']);
+
+    Route::post('/sos/trigger', [SOSController::class, 'store']);
+
 
     // Route Khusus Pengguna & Relawan (Beranda & CRUD Profile)
     Route::middleware('role:pengguna,relawan')->group(function () {

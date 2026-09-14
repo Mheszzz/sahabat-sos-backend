@@ -90,9 +90,9 @@ class AuthController extends Controller
                 $user = $account->user;
 
                 // Proteksi: Tolak jika role bukan pengguna atau relawan
-                if (!in_array($user->role, ['pengguna', 'relawan'])) {
+                if (!in_array($user->role, ['pengguna'])) {
                     return response()->json([
-                        'message' => 'Akses ditolak. Jalur login ini hanya untuk Pengguna dan Relawan.'
+                        'message' => 'Akses ditolak. Jalur login ini hanya untuk Pengguna'
                     ], 403);
                 }
 
@@ -162,7 +162,7 @@ class AuthController extends Controller
                 'error'   => $e->getMessage()
             ], 500);
         }
-    }
+}
 
     /**
      * 2. LENGKAPI PROFIL (Pengguna & Relawan Baru)
@@ -173,7 +173,7 @@ class AuthController extends Controller
 
         if (!in_array($user->role, ['pengguna', 'relawan'])) { #query dari table master
             return response()->json([
-                'message' => 'Layanan ini hanya untuk Pengguna dan Relawan.'
+                'message' => 'Layanan ini hanya untuk Pengguna.'
             ], 403);
         }
 
