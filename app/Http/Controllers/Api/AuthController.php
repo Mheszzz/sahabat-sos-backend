@@ -171,7 +171,7 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        if (!in_array($user->role, ['pengguna', 'relawan'])) {
+        if (!in_array($user->role, ['pengguna', 'relawan'])) { #query dari table master
             return response()->json([
                 'message' => 'Layanan ini hanya untuk Pengguna dan Relawan.'
             ], 403);
@@ -180,7 +180,7 @@ class AuthController extends Controller
         $validated = $request->validate([
             'alamat'              => 'required|string|max:255',
             'no_telp'             => 'required|string|max:20|unique:users,no_telp,' . $user->id,
-            'kategori_user'       => 'nullable|in:umum,tunarungu,tunanetra,tunawicara',
+            'kategori_user'       => 'nullable|in:umum,tunarungu,tunanetra,tunawicara', 
             'catatan_medis'       => 'nullable|string',
             'getaran'             => 'nullable|boolean',
             'talkback'            => 'nullable|boolean',

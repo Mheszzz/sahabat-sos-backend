@@ -63,4 +63,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/admin/relawan/pending', [AuthController::class, 'getPendingRelawan']);
         Route::put('/admin/relawan/{id}/verifikasi', [AuthController::class, 'verifikasiRelawan']);
     });
+
+    // Route proxy untuk mengambil file dari storage (berguna agar lolos CORS saat development dengan artisan serve)
+    Route::get('/storage-file/{path}', function ($path) {
+        $fullPath = storage_path('app/public/' . $path);
+        if (!file_exists($fullPath)) {
+            abort(404);
+        }
+        return response()->file($fullPath);
+    })->where('path', '.*');
 });
