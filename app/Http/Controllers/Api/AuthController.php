@@ -162,7 +162,7 @@ class AuthController extends Controller
                 'error'   => $e->getMessage()
             ], 500);
         }
-}
+    }
 
     /**
      * 2. LENGKAPI PROFIL (Pengguna & Relawan Baru)
@@ -581,10 +581,24 @@ class AuthController extends Controller
 
     /**
      * 7. LOGOUT
+     * Catatan: Jika Admin logout, seluruh hak aksesnya otomatis di-reset menjadi kosong ([]).
      */
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
-        return response()->json(['message' => 'Logout berhasil']);
+        $user = $request->user();
+
+        if ($user && $user->role === 'admin') {
+            $user->update([
+                'permissions'            => [],
+                'permissions_granted_at' => null,
+                'permissions_granted_by' => null,
+            ]);
+        }
+
+        $user->currentAccessToken()->delete();
+
+        return response()->json([
+            'message' => 'Logout berhasil' . ($user && $user->role === 'admin' ? '. Hak akses Admin telah di-reset.' : '.')
+        ]);
     }
 }
