@@ -66,6 +66,14 @@ class LaporanController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
+
+        // Proteksi Hak Akses Admin
+        if ($user->role === 'admin' && !$user->hasPermission('kelola_laporan')) {
+            return response()->json([
+                'message' => "Akses ditolak. Anda belum memiliki hak akses 'kelola_laporan' dari Superadmin. Silakan hubungi Superadmin."
+            ], 403);
+        }
+
         $query = Laporan::with(['pengguna', 'relawan'])->latest();
 
         if ($user->role === 'pengguna') {
@@ -275,6 +283,14 @@ class LaporanController extends Controller
         }
 
         $user = $request->user();
+
+        // Proteksi Hak Akses Admin
+        if ($user->role === 'admin' && !$user->hasPermission('kelola_laporan')) {
+            return response()->json([
+                'message' => "Akses ditolak. Anda belum memiliki hak akses 'kelola_laporan' dari Superadmin. Silakan hubungi Superadmin."
+            ], 403);
+        }
+
         if ($user->role === 'pengguna' && $laporan->id_pengguna !== $user->id) {
             return response()->json(['message' => 'Akses ditolak'], 403);
         }
@@ -302,6 +318,13 @@ class LaporanController extends Controller
 
         if (!in_array($user->role, ['relawan', 'admin', 'superadmin'])) {
             return response()->json(['message' => 'Akses ditolak. Hanya relawan dan admin yang dapat menanggapi laporan.'], 403);
+        }
+
+        // Proteksi Hak Akses Admin
+        if ($user->role === 'admin' && !$user->hasPermission('kelola_laporan')) {
+            return response()->json([
+                'message' => "Akses ditolak. Anda belum memiliki hak akses 'kelola_laporan' dari Superadmin. Silakan hubungi Superadmin."
+            ], 403);
         }
 
         $request->validate([

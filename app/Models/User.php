@@ -42,6 +42,9 @@ class User extends Authenticatable
         'status_verifikasi',
         'persetujuan_privasi',
         'waktu_persetujuan',
+        'permissions',
+        'permissions_granted_at',
+        'permissions_granted_by',
     ];
 
     /**
@@ -59,16 +62,18 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'getaran'             => 'boolean',
-            'talkback'            => 'boolean',
-            'panduan_suara'       => 'boolean',
-            'text_besar'          => 'boolean',
-            'kontras_tinggi'      => 'boolean',
-            'latitude'            => 'float',
-            'longitude'           => 'float',
-            'last_located_at'     => 'datetime',
-            'persetujuan_privasi' => 'boolean',
-            'waktu_persetujuan'   => 'datetime',
+            'getaran'                => 'boolean',
+            'talkback'               => 'boolean',
+            'panduan_suara'          => 'boolean',
+            'text_besar'             => 'boolean',
+            'kontras_tinggi'         => 'boolean',
+            'latitude'               => 'float',
+            'longitude'              => 'float',
+            'last_located_at'        => 'datetime',
+            'persetujuan_privasi'    => 'boolean',
+            'waktu_persetujuan'      => 'datetime',
+            'permissions'            => 'array',
+            'permissions_granted_at' => 'datetime',
         ];
     }
 
@@ -164,5 +169,30 @@ class User extends Authenticatable
     public function laporanHandled()
     {
         return $this->hasMany(Laporan::class, 'id_relawan');
+    }
+
+    /**
+     * Relasi ke Superadmin yang memberikan hak akses
+     */
+    public function grantedBy()
+    {
+        return $this->belongsTo(User::class, 'permissions_granted_by');
+    }
+
+    /**
+     * Cek apakah user memiliki hak akses spesifik
+     */
+    public function hasPermission(string $permission): bool
+    {
+        if ($this->role === 'superadmin') {
+            return true;
+        }
+
+        if ($this->role !== 'admin') {
+            return false;
+        }
+
+        $permissions = $this->permissions ?? [];
+        return in_array($permission, $permissions);
     }
 }
