@@ -162,7 +162,7 @@ class AuthController extends Controller
                 'error'   => $e->getMessage()
             ], 500);
         }
-}
+    }
 
     /**
      * 2. LENGKAPI PROFIL (Pengguna & Relawan Baru)
