@@ -90,7 +90,7 @@ class AuthController extends Controller
                 $user = $account->user;
 
                 // Proteksi: Tolak jika role bukan pengguna atau relawan
-                if (!in_array($user->role, ['pengguna'])) {
+                if (!in_array($user->role, ['pengguna','relawan'])) {
                     return response()->json([
                         'message' => 'Akses ditolak. Jalur login ini hanya untuk Pengguna'
                     ], 403);
