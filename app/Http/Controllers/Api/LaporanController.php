@@ -16,45 +16,12 @@ class LaporanController extends Controller
      */
     public function getOptions()
     {
+        $kategori = \App\Models\KategoriLaporan::where('is_active', true)->get();
+        $pesanCepat = \App\Models\PesanCepat::where('is_active', true)->pluck('pesan');
+
         return response()->json([
-            'kategori_laporan' => [
-                [
-                    'id'       => 'butuh_pendamping',
-                    'title'    => 'Butuh Pendamping',
-                    'subtitle' => 'Relawan & Petugas',
-                ],
-                [
-                    'id'       => 'kondisi_medis',
-                    'title'    => 'Kondisi Medis',
-                    'subtitle' => 'Ambulans & Obat',
-                ],
-                [
-                    'id'       => 'ancaman_bahaya',
-                    'title'    => 'Ancaman / Bahaya',
-                    'subtitle' => 'Keamanan Cepat',
-                ],
-                [
-                    'id'       => 'tersesat',
-                    'title'    => 'Tersesat',
-                    'subtitle' => 'Panduan Arah',
-                ],
-                [
-                    'id'       => 'aksesibilitas_rusak',
-                    'title'    => 'Aksesibilitas Rusak',
-                    'subtitle' => 'Bantuan Akses',
-                ],
-                [
-                    'id'       => 'lainnya',
-                    'title'    => 'Lainnya',
-                    'subtitle' => 'Bantuan Khusus',
-                ],
-            ],
-            'pesan_cepat' => [
-                'Saya butuh bantuan di lokasi saya',
-                'Saya tidak dapat berbicara / mendengar',
-                'Tolong hubungi kontak keluarga saya',
-                'Saya butuh bantuan mobilitas / kursi roda',
-            ]
+            'kategori_laporan' => $kategori,
+            'pesan_cepat'      => $pesanCepat,
         ]);
     }
 
