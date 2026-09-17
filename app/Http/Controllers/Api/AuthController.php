@@ -89,17 +89,10 @@ class AuthController extends Controller
             if ($account) {
                 $user = $account->user;
 
-                // Proteksi: Tolak jika role bukan pengguna atau relawan
-                if (!in_array($user->role, ['pengguna'])) {
+                // Proteksi: Tolak jika role bukan pengguna atau relawan (misal Admin/Superadmin)
+                if (!in_array($user->role, ['pengguna', 'relawan'])) {
                     return response()->json([
-                        'message' => 'Akses ditolak. Jalur login ini hanya untuk Pengguna'
-                    ], 403);
-                }
-
-                // Proteksi: Tolak jika role terdaftar berbeda dengan role aplikasi yang digunakan
-                if ($user->role !== $requestedRole) {
-                    return response()->json([
-                        'message' => "Akses ditolak. Akun Anda terdaftar sebagai '{$user->role}', tidak bisa login di aplikasi '{$requestedRole}'."
+                        'message' => 'Akses ditolak. Jalur login ini hanya untuk Pengguna atau Relawan'
                     ], 403);
                 }
             } else {
@@ -112,12 +105,6 @@ class AuthController extends Controller
                     if (!in_array($user->role, ['pengguna', 'relawan'])) {
                         return response()->json([
                             'message' => 'Akses ditolak. Email ini terdaftar sebagai Admin/Superadmin.'
-                        ], 403);
-                    }
-
-                    if ($user->role !== $requestedRole) {
-                        return response()->json([
-                            'message' => "Akses ditolak. Akun Anda terdaftar sebagai '{$user->role}', tidak bisa login di aplikasi '{$requestedRole}'."
                         ], 403);
                     }
                 } else {
