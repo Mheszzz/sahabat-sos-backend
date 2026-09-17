@@ -11,7 +11,8 @@ class SOS extends Model
     protected $fillable = [
         'id_pengguna',
         'id_relawan',
-        'lokasi_sos',
+        'latitude',
+        'longitude',
         'status_sos',
         'waktu_sos',
     ];

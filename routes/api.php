@@ -40,12 +40,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/laporan/{id}', [LaporanController::class, 'show']);
     Route::put('/laporan/{id}/status', [LaporanController::class, 'updateStatus']);
 
-    Route::post('/sos/trigger', [SOSController::class, 'store']);
+    // SOS ENdpoints
+   
 
 
     // Route Khusus Pengguna & Relawan (Beranda & CRUD Profile)
     Route::middleware('role:pengguna,relawan')->group(function () {
-        Route::get('/beranda', [AuthController::class, 'beranda']);
         
         // CRUD Profil Pengguna (Nama, Foto, Kategori, Kontak, Aksesibilitas, Metode Komunikasi)
         Route::get('/pengguna/profile', [ProfilePenggunaController::class, 'show']);
@@ -53,6 +53,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/pengguna/profile', [ProfilePenggunaController::class, 'update']); // Untuk Multipart Form-Data (Upload Foto)
         Route::post('/pengguna/profile/foto', [ProfilePenggunaController::class, 'uploadFoto']);
         Route::delete('/pengguna/profile/foto', [ProfilePenggunaController::class, 'destroyFoto']);
+    });Route::get('/beranda', [AuthController::class, 'beranda']);
+    
+    //Route khusus pengguna
+    Route::middleware('role:pengguna')->group(function () {
+        // SOS Endpoints
+        Route::post('/sos/trigger', [SOSController::class, 'store']); // membuat SOS baru
+        Route::get('/sos/active', [SOSController::class, 'getActiveUserSOS']); //SOS tampil untuk pengguna
+        Route::get('/sos/user/history', [SOSController::class, 'getUserSOSHistory']);
+        Route::get('/sos/{id}', [SOSController::class, 'show']); 
+
+
     });
 
     // Route Khusus Relawan
@@ -60,6 +71,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/relawan/profile', function (Request $request) {
             return response()->json(['user' => $request->user(), 'is_profile_complete' => $request->user()->isProfileComplete()]);
         });
+        // SOS Endpoints
+        Route::get('/sos/active/relawan', [SOSController::class, 'getActiveRelawanSOS']); // SOS tampil untuk semua relawan
+        Route::get('/sos/relawan/tasks', [SOSController::class, 'activeTask']); // menampilkan SOS yang sedang ditangani 
+        Route::patch('/sos/{id}/status', [SOSController::class, 'updateStatus']); //menguubah status SOS (proses/selesai)
+
     });
 
     // Route Khusus Admin & Superadmin (Beranda Admin, Verifikasi Relawan, & Kelola Opsi Laporan)
