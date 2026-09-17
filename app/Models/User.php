@@ -39,6 +39,8 @@ class User extends Authenticatable
         'latitude',
         'longitude',
         'last_located_at',
+        'pekerjaan',
+        'alasan_relawan',
         'status_verifikasi',
         'persetujuan_privasi',
         'waktu_persetujuan',

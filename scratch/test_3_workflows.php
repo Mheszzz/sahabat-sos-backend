@@ -63,6 +63,10 @@ $resRelawanReg = $auth->register(Request::create('/api/auth/register', 'POST', [
     'password' => 'password123',
     'role' => 'relawan',
     'persetujuan_privasi' => true,
+    'no_telp' => '081234567890',
+    'alamat' => 'Jl. Relawan No. 123, Jakarta',
+    'pekerjaan' => 'Tenaga Medis',
+    'alasan_relawan' => 'Ingin membantu korban bencana dan darurat di lingkungan sekitar.',
 ]));
 echo "2a. Regis Relawan Status: " . $resRelawanReg->getStatusCode() . "\n";
 $userRelawan = User::whereHas('accounts', fn($q)=>$q->where('email', 'relawan.skenario@test.com'))->first();
