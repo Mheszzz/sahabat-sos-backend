@@ -180,6 +180,9 @@ class AuthController extends Controller
         $validated = $request->validate([
             'alamat'              => 'required|string|max:255',
             'no_telp'             => 'required|string|max:20|unique:users,no_telp,' . $user->id,
+            'role'                => 'nullable|in:pengguna,relawan',
+            'pekerjaan'           => 'nullable|string|max:255',
+            'alasan_relawan'      => 'nullable|string|max:1000',
             'kategori_user'       => 'nullable|in:umum,tunarungu,tunanetra,tunawicara', 
             'catatan_medis'       => 'nullable|string',
             'getaran'             => 'nullable|boolean',
