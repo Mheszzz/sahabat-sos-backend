@@ -11,6 +11,8 @@ use App\Http\Controllers\Api\LaporanOptionManagementController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
+Route::post('/auth/register/pengguna', [AuthController::class, 'registerPengguna']);
+Route::post('/auth/register/relawan', [AuthController::class, 'registerRelawan']);
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::get('/auth/google', [AuthController::class, 'redirectToGoogle']);
 Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback']);

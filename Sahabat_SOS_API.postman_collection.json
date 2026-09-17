@@ -25,14 +25,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Budi Santoso\",\n  \"email\": \"budi@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"pengguna\",\n  \"persetujuan_privasi\": true,\n  \"no_telp\": \"081298765432\",\n  \"alamat\": \"Jl. Merdeka No. 45, Jakarta\"\n}"
+							"raw": "{\n  \"name\": \"Budi Santoso\",\n  \"email\": \"budi@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"relawan\",\n  \"persetujuan_privasi\": true,\n  \"no_telp\": \"081298765432\",\n  \"alamat\": \"Jl. Merdeka No. 45, Jakarta\",\n  \"pekerjaan\": \"Tenaga Medis\",\n  \"alasan_relawan\": \"Ingin membantu penanganan keadaan darurat SOS di wilayah sekitar.\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/auth/register",
 							"host": ["{{base_url}}"],
 							"path": ["api", "auth", "register"]
 						},
-						"description": "Mendaftarkan akun baru untuk role 'pengguna' atau 'relawan'. Wajib menyetujui persetujuan_privasi."
+						"description": "Mendaftarkan akun baru untuk role 'pengguna' atau 'relawan'. Untuk relawan, wajib mengisi nama, email, password, no_telp, alamat, pekerjaan, dan alasan_relawan."
 					}
 				},
 				{
