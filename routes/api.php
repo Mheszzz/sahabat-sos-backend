@@ -3,12 +3,16 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AdminManagementController;
 use App\Http\Controllers\Api\LaporanController;
 use App\Http\Controllers\Api\ProfilePenggunaController;
 use App\Http\Controllers\Api\SOSController;
+use App\Http\Controllers\Api\LaporanOptionManagementController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
+Route::post('/auth/register/pengguna', [AuthController::class, 'registerPengguna']);
+Route::post('/auth/register/relawan', [AuthController::class, 'registerRelawan']);
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::get('/auth/google', [AuthController::class, 'redirectToGoogle']);
 Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
@@ -74,13 +78,45 @@ Route::middleware('auth:sanctum')->group(function () {
 
     });
 
-    // Route Khusus Admin & Superadmin (Beranda Admin & Verifikasi Relawan)
+    // Route Khusus Admin & Superadmin (Beranda Admin, Verifikasi Relawan, & Kelola Opsi Laporan)
     Route::middleware('role:admin,superadmin')->group(function () {
+        // Beranda & Stats selalu bisa diakses Admin (meskipun permissions lain kosong)
         Route::get('/admin/beranda', [AuthController::class, 'berandaAdmin']);
         Route::get('/admin/dashboard-stats', [AuthController::class, 'berandaAdmin']);
         
-        // Verifikasi Relawan oleh Admin
-        Route::get('/admin/relawan/pending', [AuthController::class, 'getPendingRelawan']);
-        Route::put('/admin/relawan/{id}/verifikasi', [AuthController::class, 'verifikasiRelawan']);
+        // Kelola Master Data Kategori Laporan & Pesan Cepat (Hanya Admin & Superadmin)
+        Route::get('/admin/kategori-laporan', [LaporanOptionManagementController::class, 'indexKategori']);
+        Route::post('/admin/kategori-laporan', [LaporanOptionManagementController::class, 'storeKategori']);
+        Route::put('/admin/kategori-laporan/{id}', [LaporanOptionManagementController::class, 'updateKategori']);
+        Route::delete('/admin/kategori-laporan/{id}', [LaporanOptionManagementController::class, 'destroyKategori']);
+
+        Route::get('/admin/pesan-cepat', [LaporanOptionManagementController::class, 'indexPesan']);
+        Route::post('/admin/pesan-cepat', [LaporanOptionManagementController::class, 'storePesan']);
+        Route::put('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'updatePesan']);
+        Route::delete('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'destroyPesan']);
+
+        // Verifikasi Relawan oleh Admin (Wajib memiliki izin verifikasi_relawan)
+        Route::middleware('permission:verifikasi_relawan')->group(function () {
+            Route::get('/admin/relawan/pending', [AuthController::class, 'getPendingRelawan']);
+            Route::put('/admin/relawan/{id}/verifikasi', [AuthController::class, 'verifikasiRelawan']);
+        });
     });
+
+    // Route Khusus Superadmin (Kelola Admin & Manajemen Hak Akses)
+    Route::middleware('role:superadmin')->prefix('superadmin')->group(function () {
+        Route::get('/admins', [AdminManagementController::class, 'index']);
+        Route::post('/admins', [AdminManagementController::class, 'store']);
+        Route::put('/admins/{id}/permissions', [AdminManagementController::class, 'updatePermissions']);
+        Route::delete('/admins/{id}/permissions', [AdminManagementController::class, 'revokePermissions']);
+    });
+
 });
+
+// Route proxy untuk mengambil file dari storage (berguna agar lolos CORS saat development dengan artisan serve)
+Route::get('/storage-file/{path}', function ($path) {
+    $fullPath = storage_path('app/public/' . $path);
+    if (!file_exists($fullPath)) {
+        abort(404);
+    }
+    return response()->file($fullPath);
+})->where('path', '.*');
