@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Models\SOS;
 use App\Events\SOSCreated;
 use App\Events\SOSUpdateStatus;
 use Illuminate\Http\Request;
+use App\Jobs\EscalateSOSJob;
+use App\Models\User;
 
 class SOSController extends Controller
 {
@@ -16,6 +19,9 @@ class SOSController extends Controller
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
         ]);
+
+        $lat = (float) $request->latitude;
+        $lng = (float) $request->longitude;
 
         $userId = $request->user()->id;
 
@@ -33,16 +39,32 @@ class SOSController extends Controller
         // Simpan data SOS ke database
         $sos = SOS::create([
             'id_pengguna' => $userId,
-            'lokasi_sos' => $request->latitude . ',' . $request->longitude,
+            'latitude' => $lat,
+            'longitude' => $lng,
             'status_sos' => 'aktif',
             'waktu_sos' => now(),
         ]);
 
         // broadcast
-        broadcast(new SOSCreated($sos))->toOthers();
+        $nearestVolunteer = User::where('role', 'relawan')
+            ->nearby($lat, $lng, 1.0)
+            ->first();
+
+        if ($nearestVolunteer) {
+            // Kirim broadcast khusus ke relawan tersebut
+            Log::info("SOS ID {$sos->id}: Ditemukan 1 relawan (< 1km) -> User ID: {$nearestVolunteer->id}. Memulai delay eskalasi 30 detik.");
+            broadcast(new SOSCreated($sos, $nearestVolunteer->id))->toOthers();
+            
+            // Tunda eskalasi ke radius 3 km selama 30 detik
+            EscalateSOSJob::dispatch($sos->id)->delay(now()->addSeconds(30));
+        } else {
+            // Jika tidak ada relawan di 1 km, langsung broadcast ke radius 3 km saat itu juga
+            Log::info("SOS ID {$sos->id}: Tidak ada relawan dalam radius 1km. Langsung eskalasi ke radius 3km.");
+            EscalateSOSJob::dispatchSync($sos->id);
+        }
 
         return response()->json([
-            'message' => 'Sinyal SOS berhasil dikirim, mencari relawan terdekat.',
+            'message' => 'Sinyal SOS berhasil dikirim.',
             'data' => $sos
         ], 201);
     }
@@ -121,8 +143,17 @@ class SOSController extends Controller
             $sos = SOS::findOrFail($id);
 
         } else {
-            // 2. Jika statusnya diubah ke 'selesai'
-            $sos = SOS::findOrFail($id);
+            // Jika statusnya diubah ke 'selesai'
+            $sos = SOS::where('id', $id)
+                ->where('id_relawan', $userId) // Pastikan hanya relawan penanggung jawab yang bisa menyelesaikan
+                ->where('status_sos', 'proses')
+                ->first();
+
+            if (!$sos) {
+                return response()->json([
+                    'message' => 'Anda tidak memiliki hak untuk menyelesaikan SOS ini atau status SOS tidak valid.'
+                ], 403);
+            }
             $sos->status_sos = $request->status_sos;
             $sos->save();
         }

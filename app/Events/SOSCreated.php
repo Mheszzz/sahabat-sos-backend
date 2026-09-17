@@ -20,10 +20,12 @@ class SOSCreated implements ShouldBroadcast
      */
 
     public $sos;
-    
-    public function __construct(SOS $sos)
+    public $targetRelawanId;
+
+    public function __construct(SOS $sos, $targetRelawanId = null)
     {
         $this->sos = $sos->load('pengguna');
+        $this->targetRelawanId = $targetRelawanId;
     }
 
     /**
@@ -33,9 +35,17 @@ class SOSCreated implements ShouldBroadcast
      */
     public function broadcastOn(): array
     {
+        // Jika ditargetkan ke 1 relawan spesifik
+        if ($this->targetRelawanId) {
+            return [
+                new PrivateChannel('relawan.' . $this->targetRelawanId),
+                new PrivateChannel('sos.' . $this->sos->id),
+            ];
+        }
+
+        // Broadcast umum ke semua relawan
         return [
             new PrivateChannel('relawan-channel'),
-
             new PrivateChannel('sos.' . $this->sos->id),
         ];
     }
@@ -51,7 +61,8 @@ class SOSCreated implements ShouldBroadcast
             'id' => $this->sos->id,
             'id_pengguna' => $this->sos->id_pengguna,
             'id_relawan' => $this->sos->id_relawan ?? null,
-            'lokasi_sos' => $this->sos->lokasi_sos,
+            'latitude' => $this->sos->latitude,
+            'longitude' => $this->sos->longitude,
             'status_sos' => $this->sos->status_sos,
             'waktu_sos' => $this->sos->waktu_sos,
             'updated_at' => $this->sos->updated_at,
