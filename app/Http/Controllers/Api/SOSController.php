@@ -195,4 +195,39 @@ class SOSController extends Controller
             'data' => $sosHistory
         ]);
     }
+
+    public function cancel(Request $request, $id)
+    {
+        // Validasi opsional: alasan_batal boleh dikirim, boleh tidak
+        $request->validate([
+            'alasan_batal' => 'nullable|string|max:255',
+        ]);
+
+        $userId = $request->user()->id;
+
+        $sos = SOS::where('id', $id)
+            ->where('id_pengguna', $userId)
+            ->whereIn('status_sos', ['aktif', 'proses'])
+            ->first();
+
+        if (!$sos) {
+            return response()->json([
+                'message' => 'Sinyal SOS tidak ditemukan atau sudah tidak dapat dibatalkan.'
+            ], 404);
+        }
+
+        // Ambil nilai dari request, jika tidak diisi akan otomatis null
+        $sos->status_sos = 'batal';
+        $sos->alasan_batal = $request->input('alasan_batal'); 
+        $sos->save();
+
+        $sos->load(['pengguna', 'relawan']);
+
+        broadcast(new SOSUpdateStatus($sos))->toOthers();
+
+        return response()->json([
+            'message' => 'Sinyal SOS berhasil dibatalkan.',
+            'data'    => $sos
+        ]);
+    }
 }
