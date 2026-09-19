@@ -61,6 +61,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/sos/trigger', [SOSController::class, 'store']); // membuat SOS baru
         Route::get('/sos/active', [SOSController::class, 'getActiveUserSOS']); //SOS tampil untuk pengguna
         Route::get('/sos/user/history', [SOSController::class, 'getUserSOSHistory']);
+        Route::post('/sos/{id}/cancel', [SOSController::class, 'cancel']); //membatalkan SOS
         Route::get('/sos/{id}', [SOSController::class, 'show']); 
 
 
