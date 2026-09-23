@@ -14,6 +14,7 @@ class Kontak_darurat extends Model
         'no_telp',
         'pesan',
         'terima_notif',
+        'tipe',
     ];
 
     protected $casts = [
