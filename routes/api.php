@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\LaporanController;
 use App\Http\Controllers\Api\ProfilePenggunaController;
 use App\Http\Controllers\Api\SOSController;
 use App\Http\Controllers\Api\LaporanOptionManagementController;
+use App\Http\Controllers\Api\KontakDaruratController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -64,7 +65,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/sos/{id}/cancel', [SOSController::class, 'cancel']); //membatalkan SOS
         Route::get('/sos/{id}', [SOSController::class, 'show']); 
 
-
+        // Kontak Darurat Endpoints (CRUD)
+        Route::get('/pengguna/kontak-darurat', [KontakDaruratController::class, 'index']);
+        Route::post('/pengguna/kontak-darurat', [KontakDaruratController::class, 'store']);
+        Route::get('/pengguna/kontak-darurat/{id}', [KontakDaruratController::class, 'show']);
+        Route::put('/pengguna/kontak-darurat/{id}', [KontakDaruratController::class, 'update']);
+        Route::delete('/pengguna/kontak-darurat/{id}', [KontakDaruratController::class, 'destroy']);
+        Route::patch('/pengguna/kontak-darurat/{id}/toggle-notif', [KontakDaruratController::class, 'toggleNotif']);
     });
 
     // Route Khusus Relawan
