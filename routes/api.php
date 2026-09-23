@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\SOSController;
 use App\Http\Controllers\Api\LaporanOptionManagementController;
 use App\Http\Controllers\Api\KontakDaruratController;
 use App\Http\Controllers\Api\DashboardAdminController;
+use App\Http\Controllers\Api\PetaKasusAdminController;
+use App\Http\Controllers\Api\SebaranUrgensiAdminController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -99,6 +101,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/admin/dashboard/dispatch', [DashboardAdminController::class, 'dispatchRelawan']);
         Route::put('/admin/dashboard/sos/{id}/selesai', [DashboardAdminController::class, 'selesaiSOS']);
         Route::get('/admin/dashboard/search', [DashboardAdminController::class, 'globalSearch']);
+
+        // Peta Kasus Aktif & Ringkasan Sebaran Urgensi Kasus
+        Route::get('/admin/dashboard/peta-kasus', [PetaKasusAdminController::class, 'index']);
+        Route::get('/admin/dashboard/sebaran-urgensi', [SebaranUrgensiAdminController::class, 'index']);
         
         // Kelola Master Data Kategori Laporan & Pesan Cepat (Hanya Admin & Superadmin)
         Route::get('/admin/kategori-laporan', [LaporanOptionManagementController::class, 'indexKategori']);
