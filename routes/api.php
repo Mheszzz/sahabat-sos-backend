@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ProfilePenggunaController;
 use App\Http\Controllers\Api\SOSController;
 use App\Http\Controllers\Api\LaporanOptionManagementController;
 use App\Http\Controllers\Api\KontakDaruratController;
+use App\Http\Controllers\Api\DashboardAdminController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -86,11 +87,18 @@ Route::middleware('auth:sanctum')->group(function () {
 
     });
 
-    // Route Khusus Admin & Superadmin (Beranda Admin, Verifikasi Relawan, & Kelola Opsi Laporan)
+    // Route Khusus Admin & Superadmin (Beranda Admin, Command Center, Verifikasi Relawan, & Kelola Opsi Laporan)
     Route::middleware('role:admin,superadmin')->group(function () {
         // Beranda & Stats selalu bisa diakses Admin (meskipun permissions lain kosong)
-        Route::get('/admin/beranda', [AuthController::class, 'berandaAdmin']);
-        Route::get('/admin/dashboard-stats', [AuthController::class, 'berandaAdmin']);
+        Route::get('/admin/beranda', [DashboardAdminController::class, 'index']);
+        Route::get('/admin/dashboard-stats', [DashboardAdminController::class, 'index']);
+        Route::get('/admin/dashboard', [DashboardAdminController::class, 'index']);
+        
+        // Quick Dispatch, Dispatch Relawan, Selesai SOS, & Global Search
+        Route::get('/admin/dashboard/quick-dispatch', [DashboardAdminController::class, 'getQuickDispatchRelawan']);
+        Route::post('/admin/dashboard/dispatch', [DashboardAdminController::class, 'dispatchRelawan']);
+        Route::put('/admin/dashboard/sos/{id}/selesai', [DashboardAdminController::class, 'selesaiSOS']);
+        Route::get('/admin/dashboard/search', [DashboardAdminController::class, 'globalSearch']);
         
         // Kelola Master Data Kategori Laporan & Pesan Cepat (Hanya Admin & Superadmin)
         Route::get('/admin/kategori-laporan', [LaporanOptionManagementController::class, 'indexKategori']);
