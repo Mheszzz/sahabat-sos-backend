@@ -47,6 +47,7 @@ class User extends Authenticatable
         'permissions',
         'permissions_granted_at',
         'permissions_granted_by',
+        'is_active',
     ];
 
     /**

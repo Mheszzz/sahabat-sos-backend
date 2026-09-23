@@ -8,6 +8,8 @@ use App\Http\Controllers\Api\LaporanController;
 use App\Http\Controllers\Api\ProfilePenggunaController;
 use App\Http\Controllers\Api\SOSController;
 use App\Http\Controllers\Api\LaporanOptionManagementController;
+use App\Http\Middleware\CheckIsActive;
+use App\Http\Controllers\Api\RelawanManagementController;
 use App\Http\Controllers\Api\KontakDaruratController;
 use App\Http\Controllers\Api\DashboardAdminController;
 use App\Http\Controllers\Api\PetaKasusAdminController;
@@ -26,7 +28,7 @@ Route::post('/auth/google/mobile', [AuthController::class, 'loginGoogleMobile'])
 Route::post('/auth/admin/login', [AuthController::class, 'adminLogin']);
 
 // Authenticated Routes (Sanctum)
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
     
     // User profile, location & complete profile
     Route::get('/user/me', [AuthController::class, 'me']);
@@ -130,6 +132,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/admins', [AdminManagementController::class, 'store']);
         Route::put('/admins/{id}/permissions', [AdminManagementController::class, 'updatePermissions']);
         Route::delete('/admins/{id}/permissions', [AdminManagementController::class, 'revokePermissions']);
+
+        //Endpoint kelola relawan
+        Route::get('/relawan', [RelawanManagementController::class, 'index']);
+        Route::put('/relawan/{id}/updateStatus', [RelawanManagementController::class, 'updateStatus']);
     });
 
 });

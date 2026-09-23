@@ -34,6 +34,7 @@ return new class extends Migration
             $table->enum('status_verifikasi', ['pending', 'terverifikasi', 'ditolak'])->default('terverifikasi');
             $table->boolean('persetujuan_privasi')->default(false);
             $table->timestamp('waktu_persetujuan')->nullable();
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
 
