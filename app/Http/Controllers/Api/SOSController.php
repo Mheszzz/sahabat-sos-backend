@@ -10,6 +10,7 @@ use App\Events\SOSUpdateStatus;
 use Illuminate\Http\Request;
 use App\Jobs\EscalateSOSJob;
 use App\Models\User;
+use App\Models\SOSRejection;
 
 class SOSController extends Controller
 {
@@ -90,16 +91,20 @@ class SOSController extends Controller
     }
 
     // menampilkan SOS yg Aktif untuk semua Relawan
-    public function getActiveRelawanSOS()
+    public function getActiveRelawanSOS(Request $request)
     {
-        $sosList = SOS::with(['pengguna', 'relawan'])
-            ->where('status_sos', 'aktif')
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $userId = $request->user()->id;
 
-        return response()->json([
-            'data' => $sosList
-        ]);
+        $sos = SOS::with('pengguna')
+            ->where('status_sos', 'aktif')
+            ->whereNull('id_relawan')
+            ->whereDoesntHave('rejections', function ($query) use ($userId) {
+                $query->where('id_relawan', $userId);
+            })
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        return response()->json(['data' => $sos]);
     }
 
     //menampilkan SOS berdasarkan ID 
@@ -196,6 +201,7 @@ class SOSController extends Controller
         ]);
     }
 
+    //pengguna membatalkan SOS yang masih aktif atau dalam proses
     public function cancel(Request $request, $id)
     {
         // Validasi opsional: alasan_batal boleh dikirim, boleh tidak
@@ -228,6 +234,40 @@ class SOSController extends Controller
         return response()->json([
             'message' => 'Sinyal SOS berhasil dibatalkan.',
             'data'    => $sos
+        ]);
+    }
+
+    //relawnan menolak SOS yang ditawarkan, memunculkan sos baru yang aktif untuk relawan tersebut
+    public function rejectSOS(Request $request, $id)
+    {
+        $userId = $request->user()->id;
+
+        $sos = SOS::where('id', $id)
+            ->where('status_sos', 'aktif')
+            ->whereNull('id_relawan')
+            ->first();
+
+        if (!$sos) {
+            return response()->json([
+                'message' => 'SOS sudah diproses relawan lain atau tidak lagi aktif.'
+            ], 400);
+        }
+
+        // 1. Simpan penolakan ke database
+        SOSRejection::firstOrCreate([
+            'id_sos'     => $sos->id,
+            'id_relawan' => $userId,
+        ]);
+
+        // 2. Eskalasi otomatis ke radius 3km
+        EscalateSOSJob::dispatchSync($sos->id);
+
+        // 3. Panggil ulang fungsi pencarian SOS aktif untuk relawan ini
+        $nextSosData = $this->getActiveRelawanSOS($request)->getData()->data;
+
+        return response()->json([
+            'message'  => 'SOS berhasil dilewati.',
+            'next_sos' => $nextSosData
         ]);
     }
 }

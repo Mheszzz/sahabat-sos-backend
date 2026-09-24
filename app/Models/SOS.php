@@ -32,4 +32,9 @@ class SOS extends Model
     {
         return $this->belongsTo(User::class, 'id_relawan');
     }
+
+    public function rejections()
+    {
+        return $this->hasMany(SOSRejection::class, 'id_sos');
+    }
 }
