@@ -46,10 +46,6 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
     Route::get('/laporan/{id}', [LaporanController::class, 'show']);
     Route::put('/laporan/{id}/status', [LaporanController::class, 'updateStatus']);
 
-    // SOS ENdpoints
-   
-
-
     // Route Khusus Pengguna & Relawan (Beranda & CRUD Profile)
     Route::middleware('role:pengguna,relawan')->group(function () {
         
@@ -59,7 +55,9 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::post('/pengguna/profile', [ProfilePenggunaController::class, 'update']); // Untuk Multipart Form-Data (Upload Foto)
         Route::post('/pengguna/profile/foto', [ProfilePenggunaController::class, 'uploadFoto']);
         Route::delete('/pengguna/profile/foto', [ProfilePenggunaController::class, 'destroyFoto']);
-    });Route::get('/beranda', [AuthController::class, 'beranda']);
+    });
+
+    Route::get('/beranda', [AuthController::class, 'beranda']);
     
     //Route khusus pengguna
     Route::middleware('role:pengguna')->group(function () {

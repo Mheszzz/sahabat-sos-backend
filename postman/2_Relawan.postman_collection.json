@@ -1,0 +1,501 @@
+{
+    "info": {
+        "_postman_id": "7b116588a45741213f20cb5ce858b7ed",
+        "name": "Sahabat SOS - Role Relawan",
+        "description": "Dokumentasi API lengkap untuk Sahabat SOS - Role Relawan backend Sahabat SOS, diurutkan dari Login sampai fitur terakhir.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8000/api",
+            "type": "string"
+        },
+        {
+            "key": "token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "relawan_token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "admin_token",
+            "value": "",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "01. Register Relawan",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/auth/register/relawan",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "auth",
+                        "register",
+                        "relawan"
+                    ]
+                },
+                "body": {
+                    "mode": "json",
+                    "json": "{\n    \"name\": \"Siti Relawan\",\n    \"no_telp\": \"085678901234\",\n    \"password\": \"password123\",\n    \"pekerjaan\": \"Tenaga Medis\",\n    \"alasan_relawan\": \"Ingin membantu korban darurat di sekitar\"\n}"
+                }
+            }
+        },
+        {
+            "name": "02. Login Relawan",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/auth/login",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "auth",
+                        "login"
+                    ]
+                },
+                "body": {
+                    "mode": "json",
+                    "json": "{\n    \"no_telp\": \"085678901234\",\n    \"password\": \"password123\"\n}"
+                }
+            }
+        },
+        {
+            "name": "03. Get Profile Relawan (me)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/user/me",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "user",
+                        "me"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{relawan_token}}",
+                            "type": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "04. Update Lokasi GPS Relawan",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/user/update-location",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "user",
+                        "update-location"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{relawan_token}}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "body": {
+                    "mode": "json",
+                    "json": "{\n    \"latitude\": -6.209,\n    \"longitude\": 106.846,\n    \"lokasi_user\": \"Jakarta Pusat\",\n    \"status_ketersediaan\": \"tersedia\"\n}"
+                }
+            }
+        },
+        {
+            "name": "05. Detail Profile Relawan",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/relawan/profile",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "relawan",
+                        "profile"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{relawan_token}}",
+                            "type": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "06. Beranda Relawan",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/beranda",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "beranda"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{relawan_token}}",
+                            "type": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "07. List Laporan Terdekat",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/laporan/nearby?latitude=-6.2090&longitude=106.8460",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "laporan",
+                        "nearby?latitude=-6.2090&longitude=106.8460"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{relawan_token}}",
+                            "type": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "08. List SOS Aktif Sekitar Relawan",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/sos/active/relawan",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "sos",
+                        "active",
+                        "relawan"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{relawan_token}}",
+                            "type": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "09. Menolak / Melewati SOS (rejectSOS)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/sos/1/reject",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "sos",
+                        "1",
+                        "reject"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{relawan_token}}",
+                            "type": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "10. Terima & Proses SOS (proses)",
+            "request": {
+                "method": "PATCH",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/sos/1/status",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "sos",
+                        "1",
+                        "status"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{relawan_token}}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "body": {
+                    "mode": "json",
+                    "json": "{\n    \"status_sos\": \"proses\"\n}"
+                }
+            }
+        },
+        {
+            "name": "11. Lihat Tugas SOS Aktif (activeTask)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/sos/relawan/tasks",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "sos",
+                        "relawan",
+                        "tasks"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{relawan_token}}",
+                            "type": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "12. Selesaikan SOS (selesai)",
+            "request": {
+                "method": "PATCH",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/sos/1/status",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "sos",
+                        "1",
+                        "status"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{relawan_token}}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "body": {
+                    "mode": "json",
+                    "json": "{\n    \"status_sos\": \"selesai\"\n}"
+                }
+            }
+        },
+        {
+            "name": "13. Update Status Laporan Kejadian",
+            "request": {
+                "method": "PUT",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/laporan/1/status",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "laporan",
+                        "1",
+                        "status"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{relawan_token}}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "body": {
+                    "mode": "json",
+                    "json": "{\n    \"status\": \"selesai\"\n}"
+                }
+            }
+        }
+    ]
+}

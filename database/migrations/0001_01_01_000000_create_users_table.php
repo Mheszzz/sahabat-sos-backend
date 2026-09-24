@@ -35,6 +35,7 @@ return new class extends Migration
             $table->boolean('persetujuan_privasi')->default(false);
             $table->timestamp('waktu_persetujuan')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->text('catatan_medis')->nullable();
             $table->timestamps();
         });
 
