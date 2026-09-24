@@ -88,7 +88,7 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::get('/sos/active/relawan', [SOSController::class, 'getActiveRelawanSOS']); // SOS tampil untuk semua relawan
         Route::get('/sos/relawan/tasks', [SOSController::class, 'activeTask']); // menampilkan SOS yang sedang ditangani 
         Route::patch('/sos/{id}/status', [SOSController::class, 'updateStatus']); //menguubah status SOS (proses/selesai)
-
+        Route::post('/sos/{id}/reject', [SOSController::class, 'rejectSOS']); //menolak SOS yang ditawarkan
     });
 
     // Route Khusus Admin & Superadmin (Beranda Admin, Command Center, Verifikasi Relawan, & Kelola Opsi Laporan)
