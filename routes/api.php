@@ -10,6 +10,10 @@ use App\Http\Controllers\Api\SOSController;
 use App\Http\Controllers\Api\LaporanOptionManagementController;
 use App\Http\Middleware\CheckIsActive;
 use App\Http\Controllers\Api\RelawanManagementController;
+use App\Http\Controllers\Api\KontakDaruratController;
+use App\Http\Controllers\Api\DashboardAdminController;
+use App\Http\Controllers\Api\PetaKasusAdminController;
+use App\Http\Controllers\Api\SebaranUrgensiAdminController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -66,7 +70,13 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::post('/sos/{id}/cancel', [SOSController::class, 'cancel']); //membatalkan SOS
         Route::get('/sos/{id}', [SOSController::class, 'show']); 
 
-
+        // Kontak Darurat Endpoints (CRUD)
+        Route::get('/pengguna/kontak-darurat', [KontakDaruratController::class, 'index']);
+        Route::post('/pengguna/kontak-darurat', [KontakDaruratController::class, 'store']);
+        Route::get('/pengguna/kontak-darurat/{id}', [KontakDaruratController::class, 'show']);
+        Route::put('/pengguna/kontak-darurat/{id}', [KontakDaruratController::class, 'update']);
+        Route::delete('/pengguna/kontak-darurat/{id}', [KontakDaruratController::class, 'destroy']);
+        Route::patch('/pengguna/kontak-darurat/{id}/toggle-notif', [KontakDaruratController::class, 'toggleNotif']);
     });
 
     // Route Khusus Relawan
@@ -81,11 +91,22 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::post('/sos/{id}/reject', [SOSController::class, 'rejectSOS']); //menolak SOS yang ditawarkan
     });
 
-    // Route Khusus Admin & Superadmin (Beranda Admin, Verifikasi Relawan, & Kelola Opsi Laporan)
+    // Route Khusus Admin & Superadmin (Beranda Admin, Command Center, Verifikasi Relawan, & Kelola Opsi Laporan)
     Route::middleware('role:admin,superadmin')->group(function () {
         // Beranda & Stats selalu bisa diakses Admin (meskipun permissions lain kosong)
-        Route::get('/admin/beranda', [AuthController::class, 'berandaAdmin']);
-        Route::get('/admin/dashboard-stats', [AuthController::class, 'berandaAdmin']);
+        Route::get('/admin/beranda', [DashboardAdminController::class, 'index']);
+        Route::get('/admin/dashboard-stats', [DashboardAdminController::class, 'index']);
+        Route::get('/admin/dashboard', [DashboardAdminController::class, 'index']);
+        
+        // Quick Dispatch, Dispatch Relawan, Selesai SOS, & Global Search
+        Route::get('/admin/dashboard/quick-dispatch', [DashboardAdminController::class, 'getQuickDispatchRelawan']);
+        Route::post('/admin/dashboard/dispatch', [DashboardAdminController::class, 'dispatchRelawan']);
+        Route::put('/admin/dashboard/sos/{id}/selesai', [DashboardAdminController::class, 'selesaiSOS']);
+        Route::get('/admin/dashboard/search', [DashboardAdminController::class, 'globalSearch']);
+
+        // Peta Kasus Aktif & Ringkasan Sebaran Urgensi Kasus
+        Route::get('/admin/dashboard/peta-kasus', [PetaKasusAdminController::class, 'index']);
+        Route::get('/admin/dashboard/sebaran-urgensi', [SebaranUrgensiAdminController::class, 'index']);
         
         // Kelola Master Data Kategori Laporan & Pesan Cepat (Hanya Admin & Superadmin)
         Route::get('/admin/kategori-laporan', [LaporanOptionManagementController::class, 'indexKategori']);

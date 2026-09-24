@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('no_telp');
             $table->text('pesan')->nullable();
             $table->boolean('terima_notif')->default(true);
+            $table->enum('tipe', ['utama', 'sekunder'])->default('sekunder');
             $table->timestamps();
         });
     }
