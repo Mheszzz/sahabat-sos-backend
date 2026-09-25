@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class AdminManagementController extends Controller
 {
@@ -46,13 +47,18 @@ class AdminManagementController extends Controller
     {
         $request->validate([
             'name'     => 'required|string|max:255',
-            'email'    => 'required|email',
+            'email'    => ['required', 'email', 'max:255'],
             'password' => 'required|string|min:6',
             'no_telp'  => 'nullable|string|max:20|unique:users,no_telp',
             'alamat'   => 'nullable|string|max:255',
         ]);
 
-        $existingAccount = Account::where('email', $request->email)->first();
+        $email = strtolower(trim($request->email));
+
+        $existingAccount = Account::where('provider', 'local')
+            ->where('email', $email)
+            ->first();
+
         if ($existingAccount) {
             return response()->json([
                 'message' => 'Email sudah terdaftar. Gunakan email lain.'
@@ -70,14 +76,14 @@ class AdminManagementController extends Controller
                 'status_verifikasi'   => 'terverifikasi',
                 'persetujuan_privasi' => true,
                 'waktu_persetujuan'   => now(),
-                'permissions'         => [], // Default kosong, menunggu hak akses diberikan oleh Superadmin
+                'permissions'         => [],
             ]);
 
             Account::create([
                 'user_id'  => $admin->id,
                 'provider' => 'local',
-                'email'    => $request->email,
-                'password' => $request->password,
+                'email'    => $email,
+                'password' => Hash::make($request->password),
             ]);
 
             DB::commit();
@@ -88,9 +94,10 @@ class AdminManagementController extends Controller
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Gagal membuat akun Admin.',
-                'error'   => $e->getMessage()
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }

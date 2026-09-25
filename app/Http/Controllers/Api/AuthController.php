@@ -210,8 +210,10 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // Cari kredensial lokal di tabel accounts berdasarkan email
-        $account = Account::where('email', $request->email)
+        // Normalisasi email lalu cari kredensial lokal di tabel accounts
+        $email = strtolower(trim($request->email));
+
+        $account = Account::where('email', $email)
             ->where('provider', 'local')
             ->first();
 
@@ -377,7 +379,9 @@ class AuthController extends Controller
             'persetujuan_privasi.accepted' => 'Anda harus menyetujui syarat & ketentuan penggunaan data pribadi dan medis untuk mendaftar.',
         ]);
 
-        $existingAccount = Account::where('email', $request->email)->first();
+        $email = strtolower(trim($request->email));
+
+        $existingAccount = Account::where('email', $email)->first();
         if ($existingAccount) {
             return response()->json([
                 'message' => 'Email sudah terdaftar. Silakan gunakan email lain atau login.'
@@ -400,7 +404,7 @@ class AuthController extends Controller
             Account::create([
                 'user_id'  => $user->id,
                 'provider' => 'local',
-                'email'    => $request->email,
+                'email'    => $email,
                 'password' => $request->password,
             ]);
 
@@ -435,7 +439,9 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $account = Account::where('email', $request->email)
+        $email = strtolower(trim($request->email));
+
+        $account = Account::where('email', $email)
             ->where('provider', 'local')
             ->first();
 
