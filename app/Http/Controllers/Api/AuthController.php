@@ -89,17 +89,10 @@ class AuthController extends Controller
             if ($account) {
                 $user = $account->user;
 
-                // Proteksi: Tolak jika role bukan pengguna atau relawan
-                if (!in_array($user->role, ['pengguna'])) {
+                // Proteksi: Tolak jika role bukan pengguna atau relawan (misal Admin/Superadmin)
+                if (!in_array($user->role, ['pengguna', 'relawan'])) {
                     return response()->json([
-                        'message' => 'Akses ditolak. Jalur login ini hanya untuk Pengguna'
-                    ], 403);
-                }
-
-                // Proteksi: Tolak jika role terdaftar berbeda dengan role aplikasi yang digunakan
-                if ($user->role !== $requestedRole) {
-                    return response()->json([
-                        'message' => "Akses ditolak. Akun Anda terdaftar sebagai '{$user->role}', tidak bisa login di aplikasi '{$requestedRole}'."
+                        'message' => 'Akses ditolak. Jalur login ini hanya untuk Pengguna atau Relawan'
                     ], 403);
                 }
             } else {
@@ -112,12 +105,6 @@ class AuthController extends Controller
                     if (!in_array($user->role, ['pengguna', 'relawan'])) {
                         return response()->json([
                             'message' => 'Akses ditolak. Email ini terdaftar sebagai Admin/Superadmin.'
-                        ], 403);
-                    }
-
-                    if ($user->role !== $requestedRole) {
-                        return response()->json([
-                            'message' => "Akses ditolak. Akun Anda terdaftar sebagai '{$user->role}', tidak bisa login di aplikasi '{$requestedRole}'."
                         ], 403);
                     }
                 } else {
@@ -180,6 +167,9 @@ class AuthController extends Controller
         $validated = $request->validate([
             'alamat'              => 'required|string|max:255',
             'no_telp'             => 'required|string|max:20|unique:users,no_telp,' . $user->id,
+            'role'                => 'nullable|in:pengguna,relawan',
+            'pekerjaan'           => 'nullable|string|max:255',
+            'alasan_relawan'      => 'nullable|string|max:1000',
             'kategori_user'       => 'nullable|in:umum,tunarungu,tunanetra,tunawicara', 
             'catatan_medis'       => 'nullable|string',
             'getaran'             => 'nullable|boolean',
@@ -366,17 +356,25 @@ class AuthController extends Controller
      */
     public function register(Request $request)
     {
+        $isRelawan = $request->role === 'relawan';
+
         $request->validate([
             'name'                => 'required|string|max:255',
             'email'               => 'required|email',
             'password'            => 'required|string|min:6',
             'role'                => 'required|in:pengguna,relawan',
             'persetujuan_privasi' => 'required|accepted',
-            'no_telp'             => 'nullable|string|max:20|unique:users,no_telp',
-            'alamat'              => 'nullable|string|max:255',
+            'no_telp'             => ($isRelawan ? 'required' : 'nullable') . '|string|max:20|unique:users,no_telp',
+            'alamat'              => ($isRelawan ? 'required' : 'nullable') . '|string|max:255',
+            'pekerjaan'           => ($isRelawan ? 'required' : 'nullable') . '|string|max:255',
+            'alasan_relawan'      => ($isRelawan ? 'required' : 'nullable') . '|string|max:1000',
         ], [
             'persetujuan_privasi.required' => 'Anda harus menyetujui syarat & ketentuan penggunaan data pribadi dan medis untuk mendaftar.',
             'persetujuan_privasi.accepted' => 'Anda harus menyetujui syarat & ketentuan penggunaan data pribadi dan medis untuk mendaftar.',
+            'alamat.required'              => 'Alamat wajib diisi untuk pendaftaran relawan.',
+            'no_telp.required'             => 'Nomor HP wajib diisi untuk pendaftaran relawan.',
+            'pekerjaan.required'           => 'Pekerjaan wajib diisi untuk pendaftaran relawan.',
+            'alasan_relawan.required'      => 'Alasan menjadi relawan wajib diisi untuk pendaftaran relawan.',
         ]);
 
         $email = strtolower(trim($request->email));
@@ -396,6 +394,8 @@ class AuthController extends Controller
                 'role'                => $request->role,
                 'no_telp'             => $request->no_telp ?? null,
                 'alamat'              => $request->alamat ?? null,
+                'pekerjaan'           => $request->pekerjaan ?? null,
+                'alasan_relawan'      => $request->alasan_relawan ?? null,
                 'status_verifikasi'   => $request->role === 'relawan' ? 'pending' : 'terverifikasi',
                 'persetujuan_privasi' => true,
                 'waktu_persetujuan'   => now(),
@@ -427,6 +427,24 @@ class AuthController extends Controller
                 'error'   => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * REGISTRASI PENGGUNA (POST /api/auth/register/pengguna)
+     */
+    public function registerPengguna(Request $request)
+    {
+        $request->merge(['role' => 'pengguna']);
+        return $this->register($request);
+    }
+
+    /**
+     * REGISTRASI RELAWAN (POST /api/auth/register/relawan)
+     */
+    public function registerRelawan(Request $request)
+    {
+        $request->merge(['role' => 'relawan']);
+        return $this->register($request);
     }
 
     /**
@@ -549,7 +567,8 @@ class AuthController extends Controller
      */
     public function getPendingRelawan(Request $request)
     {
-        $relawans = User::where('role', 'relawan')
+        $relawans = User::with('accounts')
+            ->where('role', 'relawan')
             ->where('status_verifikasi', 'pending')
             ->latest()
             ->get();

@@ -11,7 +11,8 @@ class SOS extends Model
     protected $fillable = [
         'id_pengguna',
         'id_relawan',
-        'lokasi_sos',
+        'latitude',
+        'longitude',
         'status_sos',
         'waktu_sos',
     ];
@@ -30,5 +31,10 @@ class SOS extends Model
     public function relawan()
     {
         return $this->belongsTo(User::class, 'id_relawan');
+    }
+
+    public function rejections()
+    {
+        return $this->hasMany(SOSRejection::class, 'id_sos');
     }
 }

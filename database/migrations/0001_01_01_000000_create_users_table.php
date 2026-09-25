@@ -29,9 +29,13 @@ return new class extends Migration
             $table->decimal('latitude', 10, 8)->nullable();
             $table->decimal('longitude', 11, 8)->nullable();
             $table->timestamp('last_located_at')->nullable();
+            $table->string('pekerjaan')->nullable();
+            $table->text('alasan_relawan')->nullable();
             $table->enum('status_verifikasi', ['pending', 'terverifikasi', 'ditolak'])->default('terverifikasi');
             $table->boolean('persetujuan_privasi')->default(false);
             $table->timestamp('waktu_persetujuan')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->text('catatan_medis')->nullable();
             $table->timestamps();
         });
 

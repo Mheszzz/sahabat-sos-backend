@@ -15,8 +15,11 @@ return new class extends Migration
             $table->id();
             $table->foreignId('id_pengguna')->constrained('users')->onDelete('cascade');
             $table->foreignId('id_relawan')->nullable()->constrained('users')->onDelete('set null');
-            $table->string('lokasi_sos');
-            $table->enum('status_sos', ['aktif', 'proses', 'selesai'])->default('aktif');
+            //$table->string('lokasi_sos');
+            $table->decimal('latitude', 10, 8);
+            $table->decimal('longitude', 11, 8);    
+            $table->enum('status_sos', ['aktif', 'proses', 'selesai','batal'])->default('aktif');
+            $table->string('alasan_batal')->nullable();
             $table->timestamp('waktu_sos')->nullable();
             $table->timestamps();
         });
