@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\KontakDaruratController;
 use App\Http\Controllers\Api\DashboardAdminController;
 use App\Http\Controllers\Api\PetaKasusAdminController;
 use App\Http\Controllers\Api\SebaranUrgensiAdminController;
+use App\Http\Controllers\Api\RelawanLocationController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -45,6 +46,8 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
     Route::post('/laporan', [LaporanController::class, 'store']);
     Route::get('/laporan/{id}', [LaporanController::class, 'show']);
     Route::put('/laporan/{id}/status', [LaporanController::class, 'updateStatus']);
+
+    Route::post('/relawan/location', [RelawanLocationController::class, 'updateLocation']);
 
     // Route Khusus Pengguna & Relawan (Beranda & CRUD Profile)
     Route::middleware('role:pengguna,relawan')->group(function () {
