@@ -89,7 +89,7 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         });
         //Beranda Endpoint
         Route::get('/relawan/beranda', [BerandaRelawanController::class, 'index']); //menampilkan riwayat laporan dan SOS
-        
+
         // SOS Endpoints
         Route::get('/sos/active/relawan', [SOSController::class, 'getActiveRelawanSOS']); // SOS tampil untuk semua relawan
         Route::get('/sos/relawan/tasks', [SOSController::class, 'activeTask']); // menampilkan SOS yang sedang ditangani 
@@ -125,9 +125,10 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::put('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'updatePesan']);
         Route::delete('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'destroyPesan']);
 
-        // Tugas Aktif
+        // Tugas Aktif Endpoints
         Route::get('/tugas-aktif', [KasusAktifController::class, 'index']);
         Route::get('/tugas-aktif/{tipe}/{id}', [KasusAktifController::class, 'show']);
+        Route::post('/tugas-aktif/{tipe}/{id}/selesai', [KasusAktifController::class, 'tanganiKasus']);
 
         // Verifikasi Relawan oleh Admin (Wajib memiliki izin verifikasi_relawan)
         Route::middleware('permission:verifikasi_relawan')->group(function () {
