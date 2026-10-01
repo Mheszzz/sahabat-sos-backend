@@ -70,6 +70,7 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::get('/sos/user/history', [SOSController::class, 'getUserSOSHistory']);
         Route::post('/sos/{id}/cancel', [SOSController::class, 'cancel']); //membatalkan SOS
         Route::get('/sos/{id}', [SOSController::class, 'show']); 
+        Route::get('/sos/{id}/activities', [SOSController::class, 'getActivities']); // Riwayat aktivitas SOS 
 
         // Kontak Darurat Endpoints (CRUD)
         Route::get('/pengguna/kontak-darurat', [KontakDaruratController::class, 'index']);
@@ -104,6 +105,15 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::post('/admin/dashboard/dispatch', [DashboardAdminController::class, 'dispatchRelawan']);
         Route::put('/admin/dashboard/sos/{id}/selesai', [DashboardAdminController::class, 'selesaiSOS']);
         Route::get('/admin/dashboard/search', [DashboardAdminController::class, 'globalSearch']);
+
+        // Log Riwayat Aktivitas Kasus SOS (Timeline Audit)
+        Route::get('/admin/sos/{id}/activities', [DashboardAdminController::class, 'getSosActivities']);
+
+        // Bunyikan Sirene Posko (Alarm Massal Darurat)
+        Route::post('/admin/posko/sirene', [DashboardAdminController::class, 'triggerSirenePosko']);
+
+        // Ekspor Rekapitulasi Laporan ke File CSV
+        Route::get('/admin/laporan/export', [DashboardAdminController::class, 'exportLaporanCsv']);
 
         // Peta Kasus Aktif & Ringkasan Sebaran Urgensi Kasus
         Route::get('/admin/dashboard/peta-kasus', [PetaKasusAdminController::class, 'index']);

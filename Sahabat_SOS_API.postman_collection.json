@@ -1,6 +1,6 @@
 {
     "info": {
-        "_postman_id": "055fb8f55bc33fba8813e1ea8638f617",
+        "_postman_id": "75544744c2e409972e1feaf8486485b3",
         "name": "Sahabat SOS API (Master Collection per Role)",
         "description": "Dokumentasi API lengkap untuk Sahabat SOS API (Master Collection per Role) backend Sahabat SOS, diurutkan dari Login sampai fitur terakhir.",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -714,7 +714,7 @@
                     }
                 },
                 {
-                    "name": "20. Trigger Sinyal SOS",
+                    "name": "20. Trigger Sinyal SOS (dengan Status Perangkat)",
                     "request": {
                         "method": "POST",
                         "header": [
@@ -751,7 +751,7 @@
                         },
                         "body": {
                             "mode": "json",
-                            "json": "{\n    \"latitude\": -6.2088,\n    \"longitude\": 106.8456\n}"
+                            "json": "{\n    \"latitude\": -6.2088,\n    \"longitude\": 106.8456,\n    \"battery_level\": 85,\n    \"signal_strength\": \"4G\",\n    \"device_info\": {\n        \"brand\": \"Samsung\",\n        \"model\": \"Galaxy A54 5G\",\n        \"battery_level\": 85,\n        \"signal_strength\": \"4G - Kuat\"\n    }\n}"
                         }
                     }
                 },
@@ -789,7 +789,7 @@
                     }
                 },
                 {
-                    "name": "22. Detail Sinyal SOS",
+                    "name": "22. Detail Sinyal SOS (device_info & activity_log)",
                     "request": {
                         "method": "GET",
                         "header": [
@@ -884,6 +884,40 @@
                                 "sos",
                                 "user",
                                 "history"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "25. Riwayat Aktivitas Kasus SOS (Timeline)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sos/1/activities",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sos",
+                                "1",
+                                "activities"
                             ]
                         },
                         "auth": {
@@ -1803,7 +1837,119 @@
                     }
                 },
                 {
-                    "name": "13. List Kategori Laporan",
+                    "name": "13. Riwayat Aktivitas Kasus (Timeline Log)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/admin/sos/1/activities",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "admin",
+                                "sos",
+                                "1",
+                                "activities"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "14. Bunyikan Sirene Posko (Alarm Massal)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/admin/posko/sirene",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "admin",
+                                "posko",
+                                "sirene"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "json",
+                            "json": "{\n    \"action\": \"trigger\",\n    \"pesan\": \"Peringatan Darurat: Sinyal Darurat Posko Aktif!\",\n    \"sos_id\": 1,\n    \"radius_km\": 5\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "15. Ekspor Rekapitulasi Laporan (CSV)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/admin/laporan/export",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "admin",
+                                "laporan",
+                                "export"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "16. List Kategori Laporan",
                     "request": {
                         "method": "GET",
                         "header": [
@@ -1836,7 +1982,7 @@
                     }
                 },
                 {
-                    "name": "14. Buat Kategori Laporan Baru",
+                    "name": "17. Buat Kategori Laporan Baru",
                     "request": {
                         "method": "POST",
                         "header": [
@@ -1878,7 +2024,7 @@
                     }
                 },
                 {
-                    "name": "15. Update Kategori Laporan",
+                    "name": "18. Update Kategori Laporan",
                     "request": {
                         "method": "PUT",
                         "header": [
@@ -1921,7 +2067,7 @@
                     }
                 },
                 {
-                    "name": "16. Hapus Kategori Laporan",
+                    "name": "19. Hapus Kategori Laporan",
                     "request": {
                         "method": "DELETE",
                         "header": [
@@ -1955,7 +2101,7 @@
                     }
                 },
                 {
-                    "name": "17. List Pesan Cepat",
+                    "name": "20. List Pesan Cepat",
                     "request": {
                         "method": "GET",
                         "header": [
@@ -1988,7 +2134,7 @@
                     }
                 },
                 {
-                    "name": "18. Buat Pesan Cepat Baru",
+                    "name": "21. Buat Pesan Cepat Baru",
                     "request": {
                         "method": "POST",
                         "header": [
@@ -2030,7 +2176,7 @@
                     }
                 },
                 {
-                    "name": "19. Update Pesan Cepat",
+                    "name": "22. Update Pesan Cepat",
                     "request": {
                         "method": "PUT",
                         "header": [
@@ -2073,7 +2219,7 @@
                     }
                 },
                 {
-                    "name": "20. Hapus Pesan Cepat",
+                    "name": "23. Hapus Pesan Cepat",
                     "request": {
                         "method": "DELETE",
                         "header": [

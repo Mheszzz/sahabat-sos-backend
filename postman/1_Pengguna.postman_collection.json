@@ -1,6 +1,6 @@
 {
     "info": {
-        "_postman_id": "bec94baf8ddcd604481519843ce28cc5",
+        "_postman_id": "b617701bdce2e1069a4998a64c6a7a37",
         "name": "Sahabat SOS - Role Pengguna",
         "description": "Dokumentasi API lengkap untuk Sahabat SOS - Role Pengguna backend Sahabat SOS, diurutkan dari Login sampai fitur terakhir.",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -711,7 +711,7 @@
             }
         },
         {
-            "name": "20. Trigger Sinyal SOS",
+            "name": "20. Trigger Sinyal SOS (dengan Status Perangkat)",
             "request": {
                 "method": "POST",
                 "header": [
@@ -748,7 +748,7 @@
                 },
                 "body": {
                     "mode": "json",
-                    "json": "{\n    \"latitude\": -6.2088,\n    \"longitude\": 106.8456\n}"
+                    "json": "{\n    \"latitude\": -6.2088,\n    \"longitude\": 106.8456,\n    \"battery_level\": 85,\n    \"signal_strength\": \"4G\",\n    \"device_info\": {\n        \"brand\": \"Samsung\",\n        \"model\": \"Galaxy A54 5G\",\n        \"battery_level\": 85,\n        \"signal_strength\": \"4G - Kuat\"\n    }\n}"
                 }
             }
         },
@@ -786,7 +786,7 @@
             }
         },
         {
-            "name": "22. Detail Sinyal SOS",
+            "name": "22. Detail Sinyal SOS (device_info & activity_log)",
             "request": {
                 "method": "GET",
                 "header": [
@@ -881,6 +881,40 @@
                         "sos",
                         "user",
                         "history"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{token}}",
+                            "type": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "25. Riwayat Aktivitas Kasus SOS (Timeline)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/sos/1/activities",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "sos",
+                        "1",
+                        "activities"
                     ]
                 },
                 "auth": {

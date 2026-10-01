@@ -1,6 +1,6 @@
 {
     "info": {
-        "_postman_id": "58db755673d846766119229096f7a6b1",
+        "_postman_id": "1d9b5d111a11e6bc1c70611d78c281a8",
         "name": "Sahabat SOS - Role Admin",
         "description": "Dokumentasi API lengkap untuk Sahabat SOS - Role Admin backend Sahabat SOS, diurutkan dari Login sampai fitur terakhir.",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -454,7 +454,119 @@
             }
         },
         {
-            "name": "13. List Kategori Laporan",
+            "name": "13. Riwayat Aktivitas Kasus (Timeline Log)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/admin/sos/1/activities",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "admin",
+                        "sos",
+                        "1",
+                        "activities"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{admin_token}}",
+                            "type": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "14. Bunyikan Sirene Posko (Alarm Massal)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/admin/posko/sirene",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "admin",
+                        "posko",
+                        "sirene"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{admin_token}}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "body": {
+                    "mode": "json",
+                    "json": "{\n    \"action\": \"trigger\",\n    \"pesan\": \"Peringatan Darurat: Sinyal Darurat Posko Aktif!\",\n    \"sos_id\": 1,\n    \"radius_km\": 5\n}"
+                }
+            }
+        },
+        {
+            "name": "15. Ekspor Rekapitulasi Laporan (CSV)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/admin/laporan/export",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "admin",
+                        "laporan",
+                        "export"
+                    ]
+                },
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{admin_token}}",
+                            "type": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "16. List Kategori Laporan",
             "request": {
                 "method": "GET",
                 "header": [
@@ -487,7 +599,7 @@
             }
         },
         {
-            "name": "14. Buat Kategori Laporan Baru",
+            "name": "17. Buat Kategori Laporan Baru",
             "request": {
                 "method": "POST",
                 "header": [
@@ -529,7 +641,7 @@
             }
         },
         {
-            "name": "15. Update Kategori Laporan",
+            "name": "18. Update Kategori Laporan",
             "request": {
                 "method": "PUT",
                 "header": [
@@ -572,7 +684,7 @@
             }
         },
         {
-            "name": "16. Hapus Kategori Laporan",
+            "name": "19. Hapus Kategori Laporan",
             "request": {
                 "method": "DELETE",
                 "header": [
@@ -606,7 +718,7 @@
             }
         },
         {
-            "name": "17. List Pesan Cepat",
+            "name": "20. List Pesan Cepat",
             "request": {
                 "method": "GET",
                 "header": [
@@ -639,7 +751,7 @@
             }
         },
         {
-            "name": "18. Buat Pesan Cepat Baru",
+            "name": "21. Buat Pesan Cepat Baru",
             "request": {
                 "method": "POST",
                 "header": [
@@ -681,7 +793,7 @@
             }
         },
         {
-            "name": "19. Update Pesan Cepat",
+            "name": "22. Update Pesan Cepat",
             "request": {
                 "method": "PUT",
                 "header": [
@@ -724,7 +836,7 @@
             }
         },
         {
-            "name": "20. Hapus Pesan Cepat",
+            "name": "23. Hapus Pesan Cepat",
             "request": {
                 "method": "DELETE",
                 "header": [

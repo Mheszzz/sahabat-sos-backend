@@ -142,16 +142,25 @@ $penggunaItems = [
     makeRequest('19. Detail Laporan Kejadian', 'GET', 'laporan/1', null, 'user'),
 
     // 5. Fitur Sinyal SOS Darurat
-    makeRequest('20. Trigger Sinyal SOS', 'POST', 'sos/trigger', [
-        'latitude' => -6.2088,
-        'longitude' => 106.8456
+    makeRequest('20. Trigger Sinyal SOS (dengan Status Perangkat)', 'POST', 'sos/trigger', [
+        'latitude'        => -6.2088,
+        'longitude'       => 106.8456,
+        'battery_level'   => 85,
+        'signal_strength' => '4G',
+        'device_info'     => [
+            'brand'           => 'Samsung',
+            'model'           => 'Galaxy A54 5G',
+            'battery_level'   => 85,
+            'signal_strength' => '4G - Kuat'
+        ]
     ], 'user'),
     makeRequest('21. Get SOS Aktif Saya', 'GET', 'sos/active', null, 'user'),
-    makeRequest('22. Detail Sinyal SOS', 'GET', 'sos/1', null, 'user'),
+    makeRequest('22. Detail Sinyal SOS (device_info & activity_log)', 'GET', 'sos/1', null, 'user'),
     makeRequest('23. Batalkan Sinyal SOS', 'POST', 'sos/1/cancel', [
         'alasan_batal' => 'Situasi sudah aman / salah tekan'
     ], 'user'),
     makeRequest('24. Riwayat SOS Pengguna', 'GET', 'sos/user/history', null, 'user'),
+    makeRequest('25. Riwayat Aktivitas Kasus SOS (Timeline)', 'GET', 'sos/1/activities', null, 'user'),
 ];
 
 // -------------------------------------------------------------
@@ -228,26 +237,34 @@ $adminItems = [
     ], 'admin'),
     makeRequest('11. Admin Selesaikan SOS', 'PUT', 'admin/dashboard/sos/1/selesai', null, 'admin'),
     makeRequest('12. Global Search Dashboard', 'GET', 'admin/dashboard/search?q=Budi', null, 'admin'),
+    makeRequest('13. Riwayat Aktivitas Kasus (Timeline Log)', 'GET', 'admin/sos/1/activities', null, 'admin'),
+    makeRequest('14. Bunyikan Sirene Posko (Alarm Massal)', 'POST', 'admin/posko/sirene', [
+        'action'    => 'trigger',
+        'pesan'     => 'Peringatan Darurat: Sinyal Darurat Posko Aktif!',
+        'sos_id'    => 1,
+        'radius_km' => 5.0
+    ], 'admin'),
+    makeRequest('15. Ekspor Rekapitulasi Laporan (CSV)', 'GET', 'admin/laporan/export', null, 'admin'),
 
     // 4. Kelola Master Data
-    makeRequest('13. List Kategori Laporan', 'GET', 'admin/kategori-laporan', null, 'admin'),
-    makeRequest('14. Buat Kategori Laporan Baru', 'POST', 'admin/kategori-laporan', [
+    makeRequest('16. List Kategori Laporan', 'GET', 'admin/kategori-laporan', null, 'admin'),
+    makeRequest('17. Buat Kategori Laporan Baru', 'POST', 'admin/kategori-laporan', [
         'nama_kategori' => 'Bencana Alam Fire',
         'deskripsi' => 'Kategori untuk laporan kebakaran'
     ], 'admin'),
-    makeRequest('15. Update Kategori Laporan', 'PUT', 'admin/kategori-laporan/1', [
+    makeRequest('18. Update Kategori Laporan', 'PUT', 'admin/kategori-laporan/1', [
         'nama_kategori' => 'Kebakaran Hutan & Pemukiman'
     ], 'admin'),
-    makeRequest('16. Hapus Kategori Laporan', 'DELETE', 'admin/kategori-laporan/1', null, 'admin'),
+    makeRequest('19. Hapus Kategori Laporan', 'DELETE', 'admin/kategori-laporan/1', null, 'admin'),
 
-    makeRequest('17. List Pesan Cepat', 'GET', 'admin/pesan-cepat', null, 'admin'),
-    makeRequest('18. Buat Pesan Cepat Baru', 'POST', 'admin/pesan-cepat', [
+    makeRequest('20. List Pesan Cepat', 'GET', 'admin/pesan-cepat', null, 'admin'),
+    makeRequest('21. Buat Pesan Cepat Baru', 'POST', 'admin/pesan-cepat', [
         'pesan' => 'Butuh Pertolongan Medis Segera'
     ], 'admin'),
-    makeRequest('19. Update Pesan Cepat', 'PUT', 'admin/pesan-cepat/1', [
+    makeRequest('22. Update Pesan Cepat', 'PUT', 'admin/pesan-cepat/1', [
         'pesan' => 'Butuh Mobil Ambulans Segera'
     ], 'admin'),
-    makeRequest('20. Hapus Pesan Cepat', 'DELETE', 'admin/pesan-cepat/1', null, 'admin'),
+    makeRequest('23. Hapus Pesan Cepat', 'DELETE', 'admin/pesan-cepat/1', null, 'admin'),
 ];
 
 // -------------------------------------------------------------
