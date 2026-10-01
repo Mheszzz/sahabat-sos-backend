@@ -57,4 +57,9 @@ class Laporan extends Model
     {
         return $this->belongsTo(User::class, 'id_relawan');
     }
+
+    public function catatanPenanganan()
+    {
+        return $this->hasMany(CatatanPenanganan::class, 'id_laporan');
+    }
 }

@@ -77,6 +77,10 @@ class SOS extends Model
         return $this->hasMany(SOSRejection::class, 'id_sos');
     }
 
+    public function catatanPenanganan()
+    {
+        return $this->hasMany(CatatanPenanganan::class, 'id_sos');
+    }
     /**
      * Relasi ke log aktivitas kasus SOS
      */

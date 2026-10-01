@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\SOS;
 use App\Models\Laporan;
+use App\Models\CatatanPenanganan;
 
 class KasusAktifController extends Controller
 {
@@ -130,5 +131,78 @@ class KasusAktifController extends Controller
             'message' => "Detail $tipe berhasil diambil",
             'data'    => $data,
         ]);
+    }
+
+    public function tanganiKasus(Request $request, $tipe, $id)
+    {
+        $user = $request->user();
+
+        // Proteksi Hak Akses Admin / Superadmin
+        if (!$user->hasPermission('kelola_laporan')) {
+            return response()->json([
+                'message' => "Akses ditolak. Anda belum memiliki hak akses 'kelola_laporan'."
+            ], 403);
+        }
+
+        // Validasi input catatan
+        $request->validate([
+            'catatan' => 'required|string',
+        ]);
+
+        if ($tipe === 'laporan') {
+            $laporan = Laporan::find($id);
+
+            if (!$laporan) {
+                return response()->json(['message' => 'Laporan tidak ditemukan'], 404);
+            }
+
+            // Ubah status laporan menjadi selesai
+            $laporan->update(['status' => 'selesai']);
+
+            // Simpan catatan penanganan
+            $catatan = CatatanPenanganan::create([
+                'id_admin'   => $user->id,
+                'id_laporan' => $laporan->id,
+                'catatan'    => $request->catatan,
+            ]);
+
+            return response()->json([
+                'message' => 'Laporan berhasil diselesaikan',
+                'data'    => [
+                    'laporan' => $laporan,
+                    'catatan' => $catatan,
+                ]
+            ]);
+
+        } elseif ($tipe === 'sos') {
+            $sos = SOS::find($id);
+
+            if (!$sos) {
+                return response()->json(['message' => 'SOS tidak ditemukan'], 404);
+            }
+
+            // Ubah status SOS menjadi selesai
+            $sos->update(['status_sos' => 'selesai']);
+
+            // Simpan catatan penanganan
+            $catatan = CatatanPenanganan::create([
+                'id_admin' => $user->id,
+                'id_sos'     => $sos->id,
+                'catatan'  => $request->catatan,
+            ]);
+
+            return response()->json([
+                'message' => 'SOS berhasil diselesaikan',
+                'data'    => [
+                    'sos'     => $sos,
+                    'catatan' => $catatan,
+                ]
+            ]);
+
+        } else {
+            return response()->json([
+                'message' => "Tipe tidak valid. Gunakan 'laporan' atau 'sos'."
+            ], 400);
+        }
     }
 }
