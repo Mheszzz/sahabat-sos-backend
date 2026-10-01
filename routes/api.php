@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\PetaKasusAdminController;
 use App\Http\Controllers\Api\SebaranUrgensiAdminController;
 use App\Http\Controllers\Api\RelawanLocationController;
 use App\Http\Controllers\Api\KasusAktifController;
+use App\Http\Controllers\Api\BerandaRelawanController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -86,6 +87,9 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::get('/relawan/profile', function (Request $request) {
             return response()->json(['user' => $request->user(), 'is_profile_complete' => $request->user()->isProfileComplete()]);
         });
+        //Beranda Endpoint
+        Route::get('/relawan/beranda', [BerandaRelawanController::class, 'index']); //menampilkan riwayat laporan dan SOS
+        
         // SOS Endpoints
         Route::get('/sos/active/relawan', [SOSController::class, 'getActiveRelawanSOS']); // SOS tampil untuk semua relawan
         Route::get('/sos/relawan/tasks', [SOSController::class, 'activeTask']); // menampilkan SOS yang sedang ditangani 
