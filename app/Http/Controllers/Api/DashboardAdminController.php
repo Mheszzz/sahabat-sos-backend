@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\SOS;
 use App\Models\Laporan;
 use App\Models\User;
+use App\Models\SOSActivity;
 use App\Events\SOSUpdateStatus;
+use App\Events\PoskoSireneTriggered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -66,7 +68,7 @@ class DashboardAdminController extends Controller
         // -------------------------------------------------------------
         // B. Antrean Kasus Darurat (Incident Live Queue)
         // -------------------------------------------------------------
-        $activeSosList = SOS::with(['pengguna.kontakDarurat', 'relawan'])
+        $activeSosList = SOS::with(['pengguna.kontakDarurat', 'relawan', 'activities.user'])
             ->whereIn('status_sos', ['aktif', 'proses'])
             ->orderBy('created_at', 'desc')
             ->get();
@@ -87,6 +89,18 @@ class DashboardAdminController extends Controller
                 ];
             }) : [];
 
+            $activityLog = $sos->activities->map(function ($act) {
+                return [
+                    'id'          => $act->id,
+                    'action'      => $act->action,
+                    'description' => $act->description,
+                    'actor'       => $act->user ? $act->user->name : 'Sistem',
+                    'user_id'     => $act->user_id,
+                    'role'        => $act->user ? $act->user->role : null,
+                    'created_at'  => $act->created_at ? $act->created_at->toIso8601String() : null,
+                ];
+            });
+
             return [
                 'id_kasus'      => "#SOS-{$sos->id}",
                 'raw_id'        => $sos->id,
@@ -95,6 +109,7 @@ class DashboardAdminController extends Controller
                 'waktu_relatif' => $sos->created_at ? $sos->created_at->diffForHumans() : 'Baru saja',
                 'created_at'    => $sos->created_at ? $sos->created_at->toIso8601String() : null,
                 'judul_insiden' => 'Sinyal Darurat SOS ' . ucfirst($disabilitas),
+                'device_info'   => $sos->device_info,
                 'lokasi'        => [
                     'latitude'  => (float) $sos->latitude,
                     'longitude' => (float) $sos->longitude,
@@ -116,7 +131,8 @@ class DashboardAdminController extends Controller
                     'eta'              => '~4 menit',
                     'status_penanganan'=> 'Sedang Menuju TKP',
                 ] : null,
-                'status' => $sos->status_sos,
+                'status'        => $sos->status_sos,
+                'activity_log'  => $activityLog,
             ];
         });
 
@@ -125,13 +141,14 @@ class DashboardAdminController extends Controller
         // -------------------------------------------------------------
         $titikDarurat = $activeSosList->map(function ($sos) {
             return [
-                'id'        => $sos->id,
-                'id_kasus'  => "#SOS-{$sos->id}",
-                'latitude'  => (float) $sos->latitude,
-                'longitude' => (float) $sos->longitude,
-                'status'    => $sos->status_sos,
-                'korban'    => $sos->pengguna->name ?? 'Pengguna SOS',
-                'relawan'   => $sos->relawan->name ?? null,
+                'id'          => $sos->id,
+                'id_kasus'    => "#SOS-{$sos->id}",
+                'latitude'    => (float) $sos->latitude,
+                'longitude'   => (float) $sos->longitude,
+                'status'      => $sos->status_sos,
+                'korban'      => $sos->pengguna->name ?? 'Pengguna SOS',
+                'relawan'     => $sos->relawan->name ?? null,
+                'device_info' => $sos->device_info,
             ];
         });
 
@@ -323,7 +340,7 @@ class DashboardAdminController extends Controller
         }
 
         $sos = SOS::find($request->sos_id);
-        if ($sos->status_sos === 'selesai' || $sos->status_sos === 'dibatalkan') {
+        if ($sos->status_sos === 'selesai' || $sos->status_sos === 'batal') {
             return response()->json(['message' => 'Sinyal SOS ini sudah tidak aktif.'], 422);
         }
 
@@ -332,12 +349,25 @@ class DashboardAdminController extends Controller
             'status_sos' => 'proses',
         ]);
 
+        // Catat aktivitas dispatch relawan oleh admin
+        $admin = $request->user();
+        SOSActivity::record(
+            $sos->id,
+            'admin_dispatch',
+            "Admin {$admin->name} menugaskan relawan {$relawan->name} ke lokasi kasus SOS",
+            $admin->id,
+            [
+                'relawan_id'   => $relawan->id,
+                'relawan_nama' => $relawan->name,
+            ]
+        );
+
         // Broadcast event pembaruan status SOS
         broadcast(new SOSUpdateStatus($sos))->toOthers();
 
         return response()->json([
             'message' => "Berhasil menugaskan relawan {$relawan->name} ke SOS #{$sos->id}",
-            'data'    => $sos->fresh(['pengguna', 'relawan']),
+            'data'    => $sos->fresh(['pengguna', 'relawan', 'activities.user']),
         ], 200);
     }
 
@@ -356,12 +386,196 @@ class DashboardAdminController extends Controller
             'status_sos' => 'selesai',
         ]);
 
+        $admin = $request->user();
+        SOSActivity::record(
+            $sos->id,
+            'sos_selesai',
+            "Kasus SOS #{$sos->id} ditandai selesai oleh Admin {$admin->name}",
+            $admin->id
+        );
+
         broadcast(new SOSUpdateStatus($sos))->toOthers();
 
         return response()->json([
             'message' => "Kasus SOS #{$sos->id} berhasil ditandai selesai.",
-            'data'    => $sos->fresh(['pengguna', 'relawan']),
+            'data'    => $sos->fresh(['pengguna', 'relawan', 'activities.user']),
         ], 200);
+    }
+
+    /**
+     * 5. LOG RIWAYAT AKTIVITAS KASUS (GET /api/admin/sos/{id}/activities)
+     */
+    public function getSosActivities(Request $request, $id)
+    {
+        $sos = SOS::with(['pengguna', 'relawan'])->findOrFail($id);
+
+        $activities = SOSActivity::where('sos_id', $sos->id)
+            ->with('user')
+            ->orderBy('created_at', 'asc')
+            ->get()
+            ->map(function ($act) {
+                return [
+                    'id'          => $act->id,
+                    'action'      => $act->action,
+                    'description' => $act->description,
+                    'actor'       => $act->user ? $act->user->name : 'Sistem',
+                    'user_id'     => $act->user_id,
+                    'role'        => $act->user ? $act->user->role : null,
+                    'extra_data'  => $act->extra_data,
+                    'created_at'  => $act->created_at ? $act->created_at->toIso8601String() : null,
+                ];
+            });
+
+        return response()->json([
+            'message'      => "Riwayat aktivitas kasus #SOS-{$sos->id}",
+            'sos_id'       => $sos->id,
+            'status'       => $sos->status_sos,
+            'device_info'  => $sos->device_info,
+            'total'        => $activities->count(),
+            'activity_log' => $activities,
+            'activities'   => $activities,
+        ], 200);
+    }
+
+    /**
+     * 6. BUNYIKAN SIRENE POSKO (ALARM MASSAL) (POST /api/admin/posko/sirene)
+     */
+    public function triggerSirenePosko(Request $request)
+    {
+        $request->validate([
+            'action'    => 'nullable|string|in:on,off,trigger',
+            'pesan'     => 'nullable|string|max:255',
+            'sos_id'    => 'nullable|exists:s_o_s,id',
+            'radius_km' => 'nullable|numeric',
+        ]);
+
+        $user = $request->user();
+        $action = $request->input('action', 'trigger');
+        $pesan = $request->input('pesan', 'Peringatan Darurat: Sirene Posko Pusat Diaktifkan!');
+        $sosId = $request->input('sos_id');
+
+        $payload = [
+            'sirene_active' => in_array($action, ['on', 'trigger']),
+            'action'        => $action,
+            'pesan'         => $pesan,
+            'sos_id'        => $sosId,
+            'posko'         => [
+                'nama'      => 'POSKO PUSAT SAHABAT SOS JAKARTA',
+                'latitude'  => -6.2088,
+                'longitude' => 106.8456,
+            ],
+            'radius_km'     => (float) $request->input('radius_km', 5.0),
+            'triggered_by'  => [
+                'id'        => $user->id,
+                'name'      => $user->name,
+                'role'      => $user->role,
+            ],
+            'timestamp'     => now()->toIso8601String(),
+        ];
+
+        // Broadcast event ke Reverb WebSocket
+        broadcast(new PoskoSireneTriggered($payload))->toOthers();
+
+        // Jika terhubung ke kasus SOS spesifik, catat ke log aktivitas SOS
+        if ($sosId) {
+            SOSActivity::record(
+                $sosId,
+                'sirene_posko',
+                "Sirene darurat posko dibunyikan oleh {$user->name} untuk kasus #SOS-{$sosId}",
+                $user->id,
+                ['action' => $action, 'pesan' => $pesan]
+            );
+        }
+
+        return response()->json([
+            'message' => 'Sirene Posko berhasil dioperasikan dan dibroadcast ke seluruh posko/relawan.',
+            'data'    => $payload,
+        ], 200);
+    }
+
+    /**
+     * 7. EKSPOR LAPORAN KE CSV (GET /api/admin/laporan/export)
+     */
+    public function exportLaporanCsv(Request $request)
+    {
+        $query = Laporan::with(['pengguna', 'relawan'])->orderBy('created_at', 'desc');
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('kategori_laporan')) {
+            $query->where('kategori_laporan', $request->kategori_laporan);
+        }
+
+        if ($request->filled('start_date')) {
+            $query->whereDate('created_at', '>=', $request->start_date);
+        }
+
+        if ($request->filled('end_date')) {
+            $query->whereDate('created_at', '<=', $request->end_date);
+        }
+
+        $laporans = $query->get();
+
+        $filename = 'laporan_sahabat_sos_' . now()->format('Ymd_His') . '.csv';
+
+        $callback = function () use ($laporans) {
+            $handle = fopen('php://output', 'w');
+
+            // Tambahkan UTF-8 BOM agar terbaca sempurna di Microsoft Excel
+            fputs($handle, "\xEF\xBB\xBF");
+
+            // Header Kolom CSV
+            fputcsv($handle, [
+                'ID Laporan',
+                'Nomor Kasus',
+                'Tanggal & Waktu',
+                'Kategori Laporan',
+                'Deskripsi / Pesan Kejadian',
+                'Nama Pelapor',
+                'No. Telp Pelapor',
+                'Disabilitas Pelapor',
+                'Latitude',
+                'Longitude',
+                'Alamat / Patokan Lokasi',
+                'Status Laporan',
+                'Ditangani Oleh (Relawan)',
+                'No. Telp Relawan',
+            ]);
+
+            foreach ($laporans as $lap) {
+                $pelapor = $lap->pengguna;
+                $relawan = $lap->relawan;
+
+                fputcsv($handle, [
+                    $lap->id,
+                    '#LAP-' . $lap->id,
+                    $lap->created_at ? $lap->created_at->format('Y-m-d H:i:s') : '-',
+                    $lap->kategori_laporan ?? '-',
+                    $lap->deskripsi ?? ($lap->pesan_cepat ?? '-'),
+                    $pelapor ? $pelapor->name : 'Anonim',
+                    $pelapor ? $pelapor->no_telp : '-',
+                    $pelapor ? ($pelapor->kategori_user ?? 'umum') : 'umum',
+                    $lap->latitude ?? '-',
+                    $lap->longitude ?? '-',
+                    $lap->lokasi_laporan ?? ($lap->alamat ?? '-'),
+                    $lap->status ?? 'aktif',
+                    $relawan ? $relawan->name : 'Belum Ditugaskan',
+                    $relawan ? $relawan->no_telp : '-',
+                ]);
+            }
+
+            fclose($handle);
+        };
+
+        return response()->stream($callback, 200, [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Pragma'              => 'no-cache',
+            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires'             => '0',
+        ]);
     }
 
     /**
