@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\DashboardAdminController;
 use App\Http\Controllers\Api\PetaKasusAdminController;
 use App\Http\Controllers\Api\SebaranUrgensiAdminController;
 use App\Http\Controllers\Api\RelawanLocationController;
+use App\Http\Controllers\Api\KasusAktifController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -119,6 +120,10 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::post('/admin/pesan-cepat', [LaporanOptionManagementController::class, 'storePesan']);
         Route::put('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'updatePesan']);
         Route::delete('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'destroyPesan']);
+
+        // Tugas Aktif
+        Route::get('/tugas-aktif', [KasusAktifController::class, 'index']);
+        Route::get('/tugas-aktif/{tipe}/{id}', [KasusAktifController::class, 'show']);
 
         // Verifikasi Relawan oleh Admin (Wajib memiliki izin verifikasi_relawan)
         Route::middleware('permission:verifikasi_relawan')->group(function () {
