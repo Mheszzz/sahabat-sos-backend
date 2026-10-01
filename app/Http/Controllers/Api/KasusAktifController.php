@@ -25,16 +25,12 @@ class KasusAktifController extends Controller
 
         // 1. Ambil Data Laporan
         if (!$tipe || $tipe === 'laporan') {
-            $queryLaporan = Laporan::latest('waktu_laporan');
-
-            if ($request->has('status')) {
-                $queryLaporan->where('status', $request->status);
-            }
-
-            $laporans = $queryLaporan->paginate(10, ['*'], 'page_laporan');
+            $laporan = Laporan::latest('waktu_laporan')
+                            ->whereIn('status', ['aktif', 'proses'])
+                            ->paginate(10, ['*'], 'page_laporan');
 
             // Transformasi hanya atribut yang dibutuhkan
-            $laporans->getCollection()->transform(function ($item) {
+            $laporan->getCollection()->transform(function ($item) {
                 return [
                     'id'             => $item->id,
                     'status'         => $item->status,
@@ -50,21 +46,17 @@ class KasusAktifController extends Controller
                 ];
             });
 
-            $response['laporan'] = $laporans;
+            $response['laporan'] = $laporan;
         }
 
         // 2. Ambil Data SOS
         if (!$tipe || $tipe === 'sos') {
-            $querySos = SOS::latest('waktu_sos');
-
-            if ($request->has('status')) {
-                $querySos->where('status_sos', $request->status);
-            }
-
-            $sosList = $querySos->paginate(10, ['*'], 'page_sos');
+            $sos = SOS::latest('waktu_sos')
+                        ->whereIn('status_sos', ['aktif', 'proses'])
+                        ->paginate(10, ['*'], 'page_sos');
 
             // Transformasi hanya atribut yang dibutuhkan
-            $sosList->getCollection()->transform(function ($item) {
+            $sos->getCollection()->transform(function ($item) {
                 return [
                     'id'             => $item->id,
                     'status'         => $item->status_sos,
@@ -79,7 +71,7 @@ class KasusAktifController extends Controller
                 ];
             });
 
-            $response['sos'] = $sosList;
+            $response['sos'] = $sos;
         }
 
         return response()->json([
