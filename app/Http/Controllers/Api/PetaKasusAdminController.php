@@ -65,38 +65,57 @@ class PetaKasusAdminController extends Controller
             ->whereNotNull('longitude')
             ->get()
             ->map(function ($relawan) {
-                $isBusy = SOS::whereIn('status_sos', ['aktif', 'proses'])
+                $activeSOS = SOS::with('pengguna')->whereIn('status_sos', ['aktif', 'proses'])
                     ->where('id_relawan', $relawan->id)
-                    ->exists();
+                    ->first();
+                $isBusy = $activeSOS !== null;
+                $isOff = $relawan->status_ketersediaan && $relawan->status_ketersediaan !== 'tersedia';
+
+                $statusLabel = 'siaga_bebas';
+                if ($isBusy) {
+                    $statusLabel = 'dalam_misi';
+                } elseif ($isOff) {
+                    $statusLabel = 'off_istirahat';
+                }
+
+                $misiData = null;
+                if ($isBusy) {
+                    $misiData = [
+                        'id_kasus' => "#SOS-{$activeSOS->id}",
+                        'tujuan'   => $activeSOS->pengguna->alamat ?? 'Lokasi GPS Korban',
+                    ];
+                }
 
                 return [
-                    'id'          => $relawan->id,
-                    'nama'        => $relawan->name,
-                    'no_telp'     => $relawan->no_telp,
-                    'latitude'    => (float) $relawan->latitude,
-                    'longitude'   => (float) $relawan->longitude,
-                    'status'      => $isBusy ? 'sedang_bertugas' : 'siaga',
-                    'kompetensi'  => $this->determineVolunteerCompetency($relawan),
-                    'lokasi_user' => $relawan->lokasi_user ?? 'Area Siaga',
+                    'id'           => $relawan->id,
+                    'nama'         => $relawan->name,
+                    'no_telp'      => $relawan->no_telp,
+                    'latitude'     => (float) $relawan->latitude,
+                    'longitude'    => (float) $relawan->longitude,
+                    'status'       => $statusLabel,
+                    'kompetensi'   => $this->determineVolunteerCompetency($relawan),
+                    'lokasi_user'  => $relawan->lokasi_user ?? 'Area Siaga',
+                    'misi'         => $misiData,
+                    'telemetri'    => [
+                        'baterai' => '94%',
+                        'akurasi' => '±3m',
+                    ]
                 ];
             });
 
         return response()->json([
             'message' => 'Berhasil mengambil data peta kasus aktif & posisi relawan',
             'summary' => [
-                'total_sos_aktif'     => $titikDaruratSos->count(),
-                'total_laporan_aktif' => $titikLaporanAktif->count(),
-                'total_relawan_siaga' => $posisiRelawan->where('status', 'siaga')->count(),
+                'total_sos_aktif'               => $titikDaruratSos->count(),
+                'total_laporan_aktif'           => $titikLaporanAktif->count(),
+                'total_relawan_siaga_bebas'     => $posisiRelawan->where('status', 'siaga_bebas')->count(),
+                'total_relawan_dalam_misi'      => $posisiRelawan->where('status', 'dalam_misi')->count(),
+                'total_relawan_off_istirahat'   => $posisiRelawan->where('status', 'off_istirahat')->count(),
             ],
             'data' => [
                 'titik_darurat_sos'   => $titikDaruratSos,
                 'titik_laporan_aktif' => $titikLaporanAktif,
                 'posisi_relawan'      => $posisiRelawan,
-                'posko_sahabat_sos'   => [
-                    'nama'      => 'POSKO PUSAT SAHABAT SOS JAKARTA',
-                    'latitude'  => -6.2088,
-                    'longitude' => 106.8456,
-                ],
             ],
         ], 200);
     }
