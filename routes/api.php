@@ -90,6 +90,9 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         });
         //Beranda Endpoint
         Route::get('/relawan/beranda', [BerandaRelawanController::class, 'index']); //menampilkan riwayat laporan dan SOS
+        
+        // Update Status Ketersediaan
+        Route::put('/relawan/status-ketersediaan', [BerandaRelawanController::class, 'updateStatusKetersediaan']);
 
         // SOS Endpoints
         Route::get('/sos/active/relawan', [SOSController::class, 'getActiveRelawanSOS']); // SOS tampil untuk semua relawan

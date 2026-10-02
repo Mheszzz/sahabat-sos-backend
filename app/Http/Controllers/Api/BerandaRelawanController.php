@@ -74,4 +74,24 @@ class BerandaRelawanController extends Controller
             'data'    => $riwayatGabungan,
         ], 200);
     }
+
+    public function updateStatusKetersediaan(Request $request)
+    {
+        $request->validate([
+            'status_ketersediaan' => 'required|string|in:tersedia,istirahat,off,tidak_tersedia'
+        ]);
+
+        $user = $request->user();
+        $user->update([
+            'status_ketersediaan' => $request->status_ketersediaan
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Status ketersediaan berhasil diperbarui',
+            'data'    => [
+                'status_ketersediaan' => $user->status_ketersediaan
+            ],
+        ], 200);
+    }
 }
