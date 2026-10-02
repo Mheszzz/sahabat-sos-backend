@@ -78,5 +78,11 @@ class DatabaseSeeder extends Seeder
         foreach ($pesanList as $pesan) {
             PesanCepat::firstOrCreate(['pesan' => $pesan]);
         }
+
+        // 5. Seed Dummy Data untuk Testing (Opsional)
+        // Sebaiknya hanya dijalankan saat local / development
+        // if (app()->isLocal()) {
+            $this->call(DummyDataSeeder::class);
+        // }
     }
 }
