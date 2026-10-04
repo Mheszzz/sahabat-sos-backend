@@ -22,10 +22,11 @@ echo "Status Code: " . $response->getStatusCode() . "\n";
 echo "Message: " . ($data['message'] ?? '') . "\n";
 echo "Total Laporan Aktif/Proses: " . count($data['data']['laporan']['data'] ?? []) . "\n";
 foreach ($data['data']['laporan']['data'] as $l) {
-    echo "  - [LAPORAN #{$l['id']}] Status: {$l['status']} | Alamat: {$l['lokasi']['alamat']}\n";
+    echo "  - [LAPORAN #{$l['id']}] Status: {$l['status']} | Kategori: {$l['kategori']} | Jenis/SubJudul: {$l['jenis_laporan']} | Alamat: {$l['lokasi']['alamat']}\n";
 }
 
 echo "Total SOS Aktif/Proses: " . count($data['data']['sos']['data'] ?? []) . "\n";
 foreach ($data['data']['sos']['data'] as $s) {
-    echo "  - [SOS #{$s['id']}] Status: {$s['status']} | Lat: {$s['lokasi']['latitude']}, Lng: {$s['lokasi']['longitude']}\n";
+    echo "  - [SOS #{$s['id']}] Status: {$s['status']} | Kategori: {$s['kategori']} | Jenis/SubJudul: {$s['jenis_laporan']} | Lat: {$s['lokasi']['latitude']}, Lng: {$s['lokasi']['longitude']}\n";
 }
+
