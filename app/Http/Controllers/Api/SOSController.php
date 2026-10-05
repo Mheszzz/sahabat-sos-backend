@@ -12,6 +12,9 @@ use App\Jobs\EscalateSOSJob;
 use App\Models\User;
 use App\Models\SOSRejection;
 use App\Models\SOSActivity;
+use App\Services\MapboxService;
+use App\HasGeoCalculations;
+use Illuminate\Support\Facades\Cache;
 
 class SOSController extends Controller
 {
@@ -267,15 +270,48 @@ class SOSController extends Controller
     }
 
     // menampilkan SOS aktif yang sedang ditangani oleh relawan
-    public function activeTask(Request $request)
+    public function activeTask(Request $request, MapboxService $mapboxService)
     {
+        $user = $request->user();
+
         $sos = SOS::with(['pengguna', 'relawan', 'activities.user'])
-            ->where('id_relawan', $request->user()->id)
+            ->where('id_relawan', $user->id)
             ->where('status_sos', 'proses')
             ->first();
 
+        if (!$sos) {
+            return response()->json([
+                'message' => 'Tidak ada tugas SOS aktif.',
+                'data'    => null
+            ]);
+        }
+
+        // 1. Ambil lokasi relawan dari Redis (Fallback: DB)
+        $relawanLocation = Cache::get("relawan:{$user->id}:location");
+        $relawanLat = $relawanLocation['latitude'] ?? $user->latitude;
+        $relawanLng = $relawanLocation['longitude'] ?? $user->longitude;
+
+        // 2. Minta rute jalan dari Mapbox
+        $routeData = null;
+        if ($relawanLat && $relawanLng && $sos->latitude && $sos->longitude) {
+            $routeData = $mapboxService->getRoute(
+                (float) $relawanLat,
+                (float) $relawanLng,
+                (float) $sos->latitude,
+                (float) $sos->longitude
+            );
+
+            // 3. Simpan Polyline ke Redis untuk acuan off-route
+            if ($routeData && isset($routeData['polyline'])) {
+                Cache::put("sos:{$sos->id}:polyline", $routeData['polyline'], 3600);
+            }
+        }
+
+        $data = $sos->toArray();
+        $data['route_info'] = $routeData;
+
         return response()->json([
-            'data' => $sos
+            'data' => $data
         ]);
     }
 
