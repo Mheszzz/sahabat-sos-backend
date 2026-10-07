@@ -70,23 +70,21 @@ class SOSController extends Controller
             ]
         );
 
-        // broadcast
-        $nearestVolunteer = User::where('role', 'relawan')
-            ->nearby($lat, $lng, 1.0)
-            ->first();
+        // 1. Tahap 1: Broadcast ke semua relawan dalam radius 2 km
+        $volunteers2km = User::where('role', 'relawan')
+            ->nearby($lat, $lng, 2.0)
+            ->get();
 
-        if ($nearestVolunteer) {
-            // Kirim broadcast khusus ke relawan tersebut
-            Log::info("SOS ID {$sos->id}: Ditemukan 1 relawan (< 1km) -> User ID: {$nearestVolunteer->id}. Memulai delay eskalasi 30 detik.");
-            broadcast(new SOSCreated($sos, $nearestVolunteer->id))->toOthers();
-            
-            // Tunda eskalasi ke radius 3 km selama 30 detik
-            EscalateSOSJob::dispatch($sos->id)->delay(now()->addSeconds(30));
-        } else {
-            // Jika tidak ada relawan di 1 km, langsung broadcast ke radius 3 km saat itu juga
-            Log::info("SOS ID {$sos->id}: Tidak ada relawan dalam radius 1km. Langsung eskalasi ke radius 3km.");
-            EscalateSOSJob::dispatchSync($sos->id);
+        $volunteerIds = $volunteers2km->pluck('id')->toArray();
+
+        Log::info("SOS ID {$sos->id}: Memulai broadcast tahap 1 (radius 2 km). Ditemukan {$volunteers2km->count()} relawan.");
+
+        if ($volunteers2km->isNotEmpty()) {
+            broadcast(new SOSCreated($sos, $volunteerIds, 2.0))->toOthers();
         }
+
+        // 2. Tahap 2: Tunggu 30 detik, jika belum ada yang menerima, eskalasi ke radius 3 km
+        EscalateSOSJob::dispatch($sos->id, 3.0)->delay(now()->addSeconds(30));
 
         return response()->json([
             'message' => 'Sinyal SOS berhasil dikirim.',
