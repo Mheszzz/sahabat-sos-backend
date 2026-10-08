@@ -11,6 +11,7 @@ use App\Models\KategoriLaporan;
 use App\Models\User;
 use App\Models\SOSActivity;
 use App\Events\SOSUpdateStatus;
+use App\Http\Controllers\Api\HubungiKontakDaruratController;
 use Illuminate\Support\Facades\Validator;
 
 class KasusAktifController extends Controller
@@ -99,7 +100,30 @@ class KasusAktifController extends Controller
                 'kategori_user' => $item->pengguna->kategori_user ?? 'umum',
             ];
             if ($isDetail && $item->pengguna->relationLoaded('kontakDarurat')) {
-                $pelaporData['kontak_darurat'] = $item->pengguna->kontakDarurat;
+                $kontakList = $item->pengguna->kontakDarurat;
+                $kontakUtama = $kontakList->firstWhere('tipe', 'utama') ?? $kontakList->first();
+
+                $pelaporData['kontak_darurat'] = $kontakList;
+                if ($kontakUtama) {
+                    $waNumber = HubungiKontakDaruratController::formatWhatsAppNumber($kontakUtama->no_telp);
+                    $pesan = HubungiKontakDaruratController::generateWhatsAppMessage($item, $tipe, $item->pengguna, $kontakUtama);
+                    $encoded = rawurlencode($pesan);
+
+                    $pelaporData['kontak_darurat_utama'] = [
+                        'id'               => $kontakUtama->id,
+                        'nama'             => $kontakUtama->nama,
+                        'no_telp'          => $kontakUtama->no_telp,
+                        'no_telp_wa'       => $waNumber,
+                        'tipe'             => $kontakUtama->tipe ?? 'utama',
+                        'is_utama'         => ($kontakUtama->tipe === 'utama'),
+                        'pesan_khusus'     => $kontakUtama->pesan,
+                        'pesan_wa'         => $pesan,
+                        'whatsapp_url'     => $waNumber ? "https://wa.me/{$waNumber}?text={$encoded}" : null,
+                        'whatsapp_web_url' => $waNumber ? "https://web.whatsapp.com/send?phone={$waNumber}&text={$encoded}" : null,
+                    ];
+                } else {
+                    $pelaporData['kontak_darurat_utama'] = null;
+                }
             }
         }
 
