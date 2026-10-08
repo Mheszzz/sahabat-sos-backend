@@ -39,10 +39,19 @@ class DatabaseSeeder extends Seeder
         $adminAccount = Account::where('email', 'admin@sahabatsos.com')->where('provider', 'local')->first();
         if (!$adminAccount) {
             $admin = User::create([
-                'name'    => 'Admin Utama',
-                'role'    => 'admin',
-                'alamat'  => 'Kantor Pusat Sahabat SOS',
-                'no_telp' => '081234567890',
+                'name'                   => 'Admin Utama',
+                'role'                   => 'admin',
+                'alamat'                 => 'Kantor Pusat Sahabat SOS',
+                'no_telp'                => '081234567890',
+                'permissions'            => [
+                    'kelola_laporan',
+                    'pantau_peta',
+                    'kelola_relawan',
+                    'verifikasi_relawan',
+                    'broadcast_sirene',
+                    'kelola_admin',
+                ],
+                'permissions_granted_at' => now(),
             ]);
 
             Account::create([
@@ -78,5 +87,11 @@ class DatabaseSeeder extends Seeder
         foreach ($pesanList as $pesan) {
             PesanCepat::firstOrCreate(['pesan' => $pesan]);
         }
+
+        // 5. Seed Dummy Data untuk Testing (Opsional)
+        // Sebaiknya hanya dijalankan saat local / development
+        // if (app()->isLocal()) {
+            $this->call(DummyDataSeeder::class);
+        // }
     }
 }

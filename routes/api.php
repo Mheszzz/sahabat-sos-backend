@@ -81,6 +81,8 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::put('/pengguna/kontak-darurat/{id}', [KontakDaruratController::class, 'update']);
         Route::delete('/pengguna/kontak-darurat/{id}', [KontakDaruratController::class, 'destroy']);
         Route::patch('/pengguna/kontak-darurat/{id}/toggle-notif', [KontakDaruratController::class, 'toggleNotif']);
+        // Riwayat Lengkap Pengguna (SOS & Laporan)
+        Route::get('/pengguna/riwayat', [BerandaRelawanController::class, 'riwayatPengguna']);
     });
 
     // Route Khusus Relawan
@@ -88,14 +90,19 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::get('/relawan/profile', function (Request $request) {
             return response()->json(['user' => $request->user(), 'is_profile_complete' => $request->user()->isProfileComplete()]);
         });
-        //Beranda Endpoint
-        Route::get('/relawan/beranda', [BerandaRelawanController::class, 'index']); //menampilkan riwayat laporan dan SOS
+        // Beranda & Riwayat Endpoint
+        Route::get('/relawan/beranda', [BerandaRelawanController::class, 'index']); // riwayat penanganan beranda
+        Route::get('/relawan/tugas', [BerandaRelawanController::class, 'tugasRelawan']); // tugas yang diterima (SOS & Laporan)
+        Route::get('/relawan/riwayat', [BerandaRelawanController::class, 'riwayatRelawan']); // riwayat penanganan tugas
+        
+        // Update Status Ketersediaan
+        Route::put('/relawan/status-ketersediaan', [BerandaRelawanController::class, 'updateStatusKetersediaan']);
 
         // SOS Endpoints
         Route::get('/sos/active/relawan', [SOSController::class, 'getActiveRelawanSOS']); // SOS tampil untuk semua relawan
         Route::get('/sos/relawan/tasks', [SOSController::class, 'activeTask']); // menampilkan SOS yang sedang ditangani 
-        Route::patch('/sos/{id}/status', [SOSController::class, 'updateStatus']); //menguubah status SOS (proses/selesai)
-        Route::post('/sos/{id}/reject', [SOSController::class, 'rejectSOS']); //menolak SOS yang ditawarkan
+        Route::patch('/sos/{id}/status', [SOSController::class, 'updateStatus']); // mengubah status SOS (proses/selesai)
+        Route::post('/sos/{id}/reject', [SOSController::class, 'rejectSOS']); // menolak SOS yang ditawarkan
     });
 
     // Route Khusus Admin & Superadmin (Beranda Admin, Command Center, Verifikasi Relawan, & Kelola Opsi Laporan)
@@ -105,7 +112,7 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::get('/admin/dashboard-stats', [DashboardAdminController::class, 'index']);
         Route::get('/admin/dashboard', [DashboardAdminController::class, 'index']);
         
-        // Quick Dispatch, Dispatch Relawan, Selesai SOS, & Global Search
+        // Quick Dispatch, Dispatch Relawan (SOS & Laporan), Selesai SOS, & Global Search
         Route::get('/admin/dashboard/quick-dispatch', [DashboardAdminController::class, 'getQuickDispatchRelawan']);
         Route::post('/admin/dashboard/dispatch', [DashboardAdminController::class, 'dispatchRelawan']);
         Route::put('/admin/dashboard/sos/{id}/selesai', [DashboardAdminController::class, 'selesaiSOS']);
@@ -135,10 +142,16 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::put('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'updatePesan']);
         Route::delete('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'destroyPesan']);
 
-        // Tugas Aktif Endpoints
+        // Tugas Aktif Endpoints (Semua, Terpisah Laporan, Terpisah SOS, Detail, Dispatch, & Selesai)
         Route::get('/tugas-aktif', [KasusAktifController::class, 'index']);
+        Route::get('/tugas-aktif/laporan', [KasusAktifController::class, 'indexLaporan']);
+        Route::get('/tugas-aktif/sos', [KasusAktifController::class, 'indexSOS']);
         Route::get('/tugas-aktif/{tipe}/{id}', [KasusAktifController::class, 'show']);
+        Route::post('/tugas-aktif/{tipe}/{id}/dispatch', [KasusAktifController::class, 'dispatchRelawan']);
         Route::post('/tugas-aktif/{tipe}/{id}/selesai', [KasusAktifController::class, 'tanganiKasus']);
+
+        // Riwayat Kasus Selesai (Audit Admin)
+        Route::get('/admin/riwayat-kasus', [KasusAktifController::class, 'riwayatAdmin']);
 
         // Verifikasi Relawan oleh Admin (Wajib memiliki izin verifikasi_relawan)
         Route::middleware('permission:verifikasi_relawan')->group(function () {

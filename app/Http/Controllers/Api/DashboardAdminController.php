@@ -43,7 +43,13 @@ class DashboardAdminController extends Controller
             ->pluck('id_relawan')
             ->unique()
             ->count();
-        $relawanSiagaCount = max(0, $totalRelawan - $relawanSedangBertugasCount);
+            
+        $relawanOffCount = User::where('role', 'relawan')
+            ->whereNotNull('status_ketersediaan')
+            ->where('status_ketersediaan', '!=', 'tersedia')
+            ->count();
+            
+        $relawanSiagaCount = max(0, $totalRelawan - $relawanSedangBertugasCount - $relawanOffCount);
 
         $kpi = [
             'panggilan_sos_hari_ini' => [
@@ -60,8 +66,9 @@ class DashboardAdminController extends Controller
             ],
             'relawan_siaga_aktif' => [
                 'total_personel'  => $totalRelawan,
-                'siaga'           => $relawanSiagaCount,
-                'sedang_bertugas' => $relawanSedangBertugasCount,
+                'siaga_bebas'     => $relawanSiagaCount,
+                'dalam_misi'      => $relawanSedangBertugasCount,
+                'off_istirahat'   => $relawanOffCount,
             ],
         ];
 
@@ -157,9 +164,26 @@ class DashboardAdminController extends Controller
             ->whereNotNull('longitude')
             ->get()
             ->map(function ($relawan) {
-                $isBusy = SOS::whereIn('status_sos', ['aktif', 'proses'])
+                $activeSOS = SOS::with('pengguna')->whereIn('status_sos', ['aktif', 'proses'])
                     ->where('id_relawan', $relawan->id)
-                    ->exists();
+                    ->first();
+                $isBusy = $activeSOS !== null;
+                $isOff = $relawan->status_ketersediaan && $relawan->status_ketersediaan !== 'tersedia';
+
+                $statusLabel = 'siaga_bebas';
+                if ($isBusy) {
+                    $statusLabel = 'dalam_misi';
+                } elseif ($isOff) {
+                    $statusLabel = 'off_istirahat';
+                }
+
+                $misiData = null;
+                if ($isBusy) {
+                    $misiData = [
+                        'id_kasus' => "#SOS-{$activeSOS->id}",
+                        'tujuan'   => $activeSOS->pengguna->alamat ?? 'Lokasi GPS Korban',
+                    ];
+                }
 
                 return [
                     'id'           => $relawan->id,
@@ -167,20 +191,20 @@ class DashboardAdminController extends Controller
                     'no_telp'      => $relawan->no_telp,
                     'latitude'     => (float) $relawan->latitude,
                     'longitude'    => (float) $relawan->longitude,
-                    'status'       => $isBusy ? 'sedang_bertugas' : 'siaga',
+                    'status'       => $statusLabel,
                     'kompetensi'   => $this->determineVolunteerCompetency($relawan),
                     'lokasi_user'  => $relawan->lokasi_user ?? 'Area Siaga',
+                    'misi'         => $misiData,
+                    'telemetri'    => [
+                        'baterai' => '94%',
+                        'akurasi' => '±3m',
+                    ]
                 ];
             });
 
         $gisMap = [
             'titik_darurat'     => $titikDarurat,
             'posisi_relawan'    => $posisiRelawan,
-            'posko_sahabat_sos' => [
-                'nama'      => 'POSKO PUSAT SAHABAT SOS JAKARTA',
-                'latitude'  => -6.2088,
-                'longitude' => 106.8456,
-            ],
         ];
 
         // -------------------------------------------------------------
@@ -268,6 +292,7 @@ class DashboardAdminController extends Controller
         $lat = $request->query('latitude');
         $lng = $request->query('longitude');
         $sosId = $request->query('sos_id');
+        $laporanId = $request->query('laporan_id') ?? $request->query('id_laporan');
 
         if ($sosId && (!$lat || !$lng)) {
             $sos = SOS::find($sosId);
@@ -275,11 +300,17 @@ class DashboardAdminController extends Controller
                 $lat = $sos->latitude;
                 $lng = $sos->longitude;
             }
+        } elseif ($laporanId && (!$lat || !$lng)) {
+            $laporan = Laporan::find($laporanId);
+            if ($laporan) {
+                $lat = $laporan->latitude;
+                $lng = $laporan->longitude;
+            }
         }
 
         if (!$lat || !$lng) {
             return response()->json([
-                'message' => 'Parameter latitude dan longitude atau sos_id diperlukan',
+                'message' => 'Parameter latitude dan longitude atau sos_id / laporan_id diperlukan',
             ], 422);
         }
 
@@ -291,6 +322,8 @@ class DashboardAdminController extends Controller
 
         $data = $relawans->map(function ($relawan) {
             $isBusy = SOS::whereIn('status_sos', ['aktif', 'proses'])
+                ->where('id_relawan', $relawan->id)
+                ->exists() || Laporan::whereIn('status', ['aktif', 'proses'])
                 ->where('id_relawan', $relawan->id)
                 ->exists();
 
@@ -318,12 +351,28 @@ class DashboardAdminController extends Controller
     }
 
     /**
-     * 3. DISPATCH / TUGASKAN RELAWAN KE SOS (POST /api/admin/dashboard/dispatch)
+     * 3. DISPATCH / TUGASKAN RELAWAN KE KASUS (SOS ATAU LAPORAN) (POST /api/admin/dashboard/dispatch)
      */
     public function dispatchRelawan(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'sos_id'     => 'required|exists:s_o_s,id',
+        $tipe = strtolower($request->input('tipe', ''));
+        $sosId = $request->input('sos_id');
+        $laporanId = $request->input('laporan_id') ?? $request->input('id_laporan');
+        $kasusId = $request->input('kasus_id') ?? $request->input('id');
+
+        if (!$tipe) {
+            $tipe = ($laporanId || ($kasusId && !$sosId && Laporan::where('id', $kasusId)->exists())) ? 'laporan' : 'sos';
+        }
+
+        $targetId = $tipe === 'laporan' ? ($laporanId ?? $kasusId) : ($sosId ?? $kasusId);
+
+        $validator = Validator::make([
+            'tipe'       => $tipe,
+            'target_id'  => $targetId,
+            'relawan_id' => $request->relawan_id,
+        ], [
+            'tipe'       => 'required|in:sos,laporan',
+            'target_id'  => 'required',
             'relawan_id' => 'required|exists:users,id',
         ]);
 
@@ -339,7 +388,33 @@ class DashboardAdminController extends Controller
             return response()->json(['message' => 'User yang dipilih bukan relawan.'], 422);
         }
 
-        $sos = SOS::find($request->sos_id);
+        $admin = $request->user();
+
+        if ($tipe === 'laporan') {
+            $laporan = Laporan::find($targetId);
+            if (!$laporan) {
+                return response()->json(['message' => 'Laporan tidak ditemukan.'], 404);
+            }
+            if ($laporan->status === 'selesai') {
+                return response()->json(['message' => 'Laporan ini sudah berstatus selesai.'], 422);
+            }
+
+            $laporan->update([
+                'id_relawan' => $relawan->id,
+                'status'     => 'proses',
+            ]);
+
+            return response()->json([
+                'message' => "Berhasil menugaskan relawan {$relawan->name} ke Laporan #{$laporan->id}",
+                'data'    => KasusAktifController::transformItem($laporan->fresh(['pengguna', 'relawan']), 'laporan', true),
+            ], 200);
+        }
+
+        // Default: SOS
+        $sos = SOS::find($targetId);
+        if (!$sos) {
+            return response()->json(['message' => 'Sinyal SOS tidak ditemukan.'], 404);
+        }
         if ($sos->status_sos === 'selesai' || $sos->status_sos === 'batal') {
             return response()->json(['message' => 'Sinyal SOS ini sudah tidak aktif.'], 422);
         }
@@ -350,7 +425,6 @@ class DashboardAdminController extends Controller
         ]);
 
         // Catat aktivitas dispatch relawan oleh admin
-        $admin = $request->user();
         SOSActivity::record(
             $sos->id,
             'admin_dispatch',
