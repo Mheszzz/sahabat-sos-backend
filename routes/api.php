@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\PetaKasusAdminController;
 use App\Http\Controllers\Api\SebaranUrgensiAdminController;
 use App\Http\Controllers\Api\RelawanLocationController;
 use App\Http\Controllers\Api\KasusAktifController;
+use App\Http\Controllers\Api\HubungiKontakDaruratController;
 use App\Http\Controllers\Api\BerandaRelawanController;
 
 // Public Authentication Routes
@@ -149,6 +150,8 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::get('/tugas-aktif/{tipe}/{id}', [KasusAktifController::class, 'show']);
         Route::post('/tugas-aktif/{tipe}/{id}/dispatch', [KasusAktifController::class, 'dispatchRelawan']);
         Route::post('/tugas-aktif/{tipe}/{id}/selesai', [KasusAktifController::class, 'tanganiKasus']);
+        Route::match(['get', 'post'], '/tugas-aktif/{tipe}/{id}/hubungi-kontak-darurat', [HubungiKontakDaruratController::class, 'hubungi']);
+        Route::get('/tugas-aktif/{tipe}/{id}/kontak-darurat', [HubungiKontakDaruratController::class, 'hubungi']);
 
         // Riwayat Kasus Selesai (Audit Admin)
         Route::get('/admin/riwayat-kasus', [KasusAktifController::class, 'riwayatAdmin']);
