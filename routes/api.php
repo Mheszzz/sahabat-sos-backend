@@ -149,7 +149,7 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::get('/tugas-aktif/sos', [KasusAktifController::class, 'indexSOS']);
         Route::get('/tugas-aktif/{tipe}/{id}', [KasusAktifController::class, 'show']);
         Route::post('/tugas-aktif/{tipe}/{id}/dispatch', [KasusAktifController::class, 'dispatchRelawan']);
-        Route::post('/tugas-aktif/{tipe}/{id}/selesai', [KasusAktifController::class, 'tanganiKasus']);
+        Route::patch('/tugas-aktif/{tipe}/{id}/status', [KasusAktifController::class, 'tanganiKasus']);
         Route::match(['get', 'post'], '/tugas-aktif/{tipe}/{id}/hubungi-kontak-darurat', [HubungiKontakDaruratController::class, 'hubungi']);
         Route::get('/tugas-aktif/{tipe}/{id}/kontak-darurat', [HubungiKontakDaruratController::class, 'hubungi']);
 
