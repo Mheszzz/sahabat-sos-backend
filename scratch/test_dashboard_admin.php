@@ -47,13 +47,13 @@ if (!$relawan) {
 }
 
 // Create sample SOS if none active
-$sos = SOS::where('status_sos', 'aktif')->first();
+$sos = SOS::where('status_sos', 'belum ditangani')->first();
 if (!$sos) {
     $sos = SOS::create([
         'id_pengguna' => $pengguna->id,
         'latitude'    => -6.2090,
         'longitude'   => 106.8460,
-        'status_sos'  => 'aktif',
+        'status_sos'  => 'belum ditangani',
         'waktu_sos'   => now(),
     ]);
 }

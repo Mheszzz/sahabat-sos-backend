@@ -27,7 +27,7 @@ class KasusAktifController extends Controller
     {
         $s = strtolower(trim($status ?? ''));
         return match ($s) {
-            'aktif', 'pending', 'belum tertangani', 'belum_tertangani' => 'Belum Tertangani',
+            'aktif', 'pending', 'belum tertangani', 'belum_tertangani', 'belum ditangani', 'belum_ditangani' => 'Belum Tertangani',
             'proses', 'ditangani', 'dalam penanganan' => 'Ditangani',
             'selesai' => 'Selesai',
             'batal'   => 'Batal',
@@ -43,8 +43,8 @@ class KasusAktifController extends Controller
         if (!$status) return null;
         $s = strtolower(trim($status));
         return match ($s) {
-            'belum tertangani', 'belum_tertangani', 'aktif' => ['aktif'],
-            'ditangani', 'proses' => ['proses'],
+            'belum tertangani', 'belum_tertangani', 'belum ditangani', 'belum_ditangani', 'aktif' => ['belum ditangani', 'aktif'],
+            'ditangani', 'proses' => ['ditangani', 'proses'],
             'selesai' => ['selesai'],
             'batal'   => ['batal'],
             default   => [$status],
@@ -195,7 +195,7 @@ class KasusAktifController extends Controller
         }
 
         $tipe = $request->query('tipe'); // 'laporan' | 'sos' | null (keduanya)
-        $statusFilter = self::mapStatusToInternal($request->query('status')) ?? ['aktif', 'proses'];
+        $statusFilter = self::mapStatusToInternal($request->query('status')) ?? ['belum ditangani', 'ditangani', 'aktif', 'proses'];
         $perPage = (int) $request->query('per_page', 10);
         $response = [];
 
@@ -243,7 +243,7 @@ class KasusAktifController extends Controller
             ], 403);
         }
 
-        $statusFilter = self::mapStatusToInternal($request->query('status')) ?? ['aktif', 'proses'];
+        $statusFilter = self::mapStatusToInternal($request->query('status')) ?? ['belum ditangani', 'ditangani', 'aktif', 'proses'];
         $perPage = (int) $request->query('per_page', 10);
 
         $laporan = Laporan::with(['pengguna', 'relawan'])
@@ -273,7 +273,7 @@ class KasusAktifController extends Controller
             ], 403);
         }
 
-        $statusFilter = self::mapStatusToInternal($request->query('status')) ?? ['aktif', 'proses'];
+        $statusFilter = self::mapStatusToInternal($request->query('status')) ?? ['belum ditangani', 'ditangani', 'aktif', 'proses'];
         $perPage = (int) $request->query('per_page', 10);
 
         $sos = SOS::with(['pengguna', 'relawan'])
@@ -365,7 +365,7 @@ class KasusAktifController extends Controller
 
             $laporan->update([
                 'id_relawan' => $relawan->id,
-                'status'     => 'proses',
+                'status'     => 'ditangani',
             ]);
 
             return response()->json([
@@ -385,7 +385,7 @@ class KasusAktifController extends Controller
 
             $sos->update([
                 'id_relawan' => $relawan->id,
-                'status_sos' => 'proses',
+                'status_sos' => 'ditangani',
             ]);
 
             SOSActivity::record(
@@ -424,11 +424,15 @@ class KasusAktifController extends Controller
         }
 
         $request->validate([
-            'status'  => 'required|in:proses,selesai',
+            'status'  => 'required|in:belum ditangani,ditangani,proses,selesai',
             'catatan' => 'nullable|string',
         ]);
 
-        $targetStatus = $request->status;
+        $targetStatus = match ($request->status) {
+            'aktif'  => 'belum ditangani',
+            'proses' => 'ditangani',
+            default  => $request->status,
+        };
         $tipeLower = strtolower($tipe);
 
         if (!in_array($tipeLower, ['laporan', 'sos'])) {
@@ -457,10 +461,10 @@ class KasusAktifController extends Controller
             return response()->json(['message' => 'Laporan ini sudah berstatus selesai.'], 422);
         }
 
-        // 1. Jika kasus saat ini SUDAH berstatus proses:
-        if ($laporan->status === 'proses') {
-            // Cegah ambil alih lagi jika sudah proses
-            if ($targetStatus === 'proses') {
+        // 1. Jika kasus saat ini SUDAH berstatus ditangani / proses:
+        if (in_array($laporan->status, ['ditangani', 'proses'])) {
+            // Cegah ambil alih lagi jika sudah ditangani
+            if (in_array($targetStatus, ['ditangani', 'proses'])) {
                 return response()->json([
                     'message' => 'Laporan ini sudah dalam status proses penanganan.'
                 ], 422);
@@ -475,15 +479,15 @@ class KasusAktifController extends Controller
             }
         }
 
-        // 2. Jika kasus masih aktif tetapi sudah ada relawan yang ditugaskan
-        if ($targetStatus === 'proses' && !is_null($laporan->id_relawan) && $laporan->id_relawan !== $user->id) {
+        // 2. Jika kasus masih aktif/belum ditangani tetapi sudah ada relawan yang ditugaskan
+        if (in_array($targetStatus, ['ditangani', 'proses']) && !is_null($laporan->id_relawan) && $laporan->id_relawan !== $user->id) {
             return response()->json([
                 'message' => 'Laporan ini sudah memiliki relawan penanggung jawab dan tidak dapat diambil alih.'
             ], 422);
         }
 
         $updateData = ['status' => $targetStatus];
-        if ($targetStatus === 'proses') {
+        if (in_array($targetStatus, ['ditangani', 'proses'])) {
             // Catat ID admin yang mengambil alih ke id_relawan
             $updateData['id_relawan'] = $user->id;
         } elseif ($targetStatus === 'selesai' && empty($laporan->id_relawan)) {
@@ -527,10 +531,10 @@ class KasusAktifController extends Controller
             ], 422);
         }
 
-        // 1. Jika kasus SOS saat ini SUDAH berstatus proses:
-        if ($sos->status_sos === 'proses') {
-            // Cegah ambil alih lagi jika sudah proses
-            if ($targetStatus === 'proses') {
+        // 1. Jika kasus SOS saat ini SUDAH berstatus ditangani / proses:
+        if (in_array($sos->status_sos, ['ditangani', 'proses'])) {
+            // Cegah ambil alih lagi jika sudah ditangani
+            if (in_array($targetStatus, ['ditangani', 'proses'])) {
                 return response()->json([
                     'message' => 'Kasus SOS ini sudah dalam status proses penanganan.'
                 ], 422);
@@ -545,15 +549,15 @@ class KasusAktifController extends Controller
             }
         }
 
-        // 2. Jika kasus masih aktif tetapi sudah ada relawan yang ditugaskan
-        if ($targetStatus === 'proses' && !is_null($sos->id_relawan) && $sos->id_relawan !== $user->id) {
+        // 2. Jika kasus masih aktif/belum ditangani tetapi sudah ada relawan yang ditugaskan
+        if (in_array($targetStatus, ['ditangani', 'proses']) && !is_null($sos->id_relawan) && $sos->id_relawan !== $user->id) {
             return response()->json([
                 'message' => 'Kasus SOS ini sudah memiliki relawan penanggung jawab dan tidak dapat diambil alih.'
             ], 422);
         }
 
         $updateData = ['status_sos' => $targetStatus];
-        if ($targetStatus === 'proses') {
+        if (in_array($targetStatus, ['ditangani', 'proses'])) {
             // Catat ID admin yang mengambil alih ke id_relawan
             $updateData['id_relawan'] = $user->id;
         } elseif ($targetStatus === 'selesai' && empty($sos->id_relawan)) {

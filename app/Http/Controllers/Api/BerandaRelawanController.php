@@ -108,22 +108,22 @@ class BerandaRelawanController extends Controller
 
         $data = collect();
 
-        // 1. Laporan yang ditugaskan ke relawan ini (status 'proses' / aktif)
+        // 1. Laporan yang ditugaskan ke relawan ini (status 'ditangani' / 'proses')
         if (!$tipe || $tipe === 'laporan') {
             $laporan = Laporan::with(['pengguna.kontakDarurat', 'relawan'])
                 ->where('id_relawan', $relawanId)
-                ->whereIn('status', ['proses', 'aktif'])
+                ->whereIn('status', ['ditangani', 'proses', 'belum ditangani', 'aktif'])
                 ->latest('waktu_laporan')
                 ->get()
                 ->map(fn($item) => KasusAktifController::transformItem($item, 'laporan'));
             $data = $data->concat($laporan);
         }
 
-        // 2. SOS yang ditugaskan ke relawan ini (status_sos 'proses')
+        // 2. SOS yang ditugaskan ke relawan ini (status_sos 'ditangani' / 'proses')
         if (!$tipe || $tipe === 'sos') {
             $sos = SOS::with(['pengguna.kontakDarurat', 'relawan'])
                 ->where('id_relawan', $relawanId)
-                ->whereIn('status_sos', ['proses', 'aktif'])
+                ->whereIn('status_sos', ['ditangani', 'proses', 'belum ditangani', 'aktif'])
                 ->latest('waktu_sos')
                 ->get()
                 ->map(fn($item) => KasusAktifController::transformItem($item, 'sos'));

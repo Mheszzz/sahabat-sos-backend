@@ -31,10 +31,10 @@ class EscalateSOSJob implements ShouldQueue
     {
         $sos = SOS::find($this->sosId);
 
-        // Jika SOS tidak ditemukan, atau sudah bukan 'aktif' (sudah 'proses', 'selesai', atau 'batal'),
+        // Jika SOS tidak ditemukan, atau sudah bukan 'belum ditangani'/'aktif' (sudah 'ditangani'/'proses', 'selesai', atau 'batal'),
         // atau sudah ada relawan yang mengambil tugas (id_relawan tidak null), hentikan eskalasi!
-        if (!$sos || $sos->status_sos !== 'aktif' || !is_null($sos->id_relawan)) {
-            Log::info("Eskalasi SOS ID {$this->sosId} (radius {$this->targetRadius} km) dibatalkan karena SOS sudah diproses, selesai, atau dibatalkan.");
+        if (!$sos || !in_array($sos->status_sos, ['belum ditangani', 'aktif']) || !is_null($sos->id_relawan)) {
+            Log::info("Eskalasi SOS ID {$this->sosId} (radius {$this->targetRadius} km) dibatalkan karena SOS sudah diproses/ditangani, selesai, atau dibatalkan.");
             return;
         }
 

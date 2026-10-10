@@ -19,8 +19,8 @@ class SebaranUrgensiAdminController extends Controller
         $today = now()->toDateString();
 
         // 1. Level Urgensi Kasus
-        $kasusKritisAktif = SOS::whereIn('status_sos', ['aktif', 'proses'])->count();
-        $kasusSedangMenunggu = Laporan::where('status', 'menunggu')->count();
+        $kasusKritisAktif = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])->count();
+        $kasusSedangMenunggu = Laporan::whereIn('status', ['belum ditangani', 'menunggu', 'aktif'])->count();
         $kasusSelesaiHariIni = SOS::where('status_sos', 'selesai')->whereDate('updated_at', $today)->count() 
             + Laporan::where('status', 'selesai')->whereDate('updated_at', $today)->count();
 
