@@ -495,7 +495,7 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        $activeSosCount = \App\Models\SOS::where('status_sos', 'aktif')->count();
+        $activeSosCount = \App\Models\SOS::whereIn('status_sos', ['belum ditangani', 'aktif'])->count();
         $totalLaporanCount = \App\Models\Laporan::count();
 
         return response()->json([
@@ -519,7 +519,7 @@ class AuthController extends Controller
         $totalUsers = User::where('role', 'pengguna')->count();
         $totalRelawan = User::where('role', 'relawan')->count();
         $totalAdmins = User::whereIn('role', ['admin', 'superadmin'])->count();
-        $activeSosCount = \App\Models\SOS::where('status_sos', 'aktif')->count();
+        $activeSosCount = \App\Models\SOS::whereIn('status_sos', ['belum ditangani', 'aktif'])->count();
         $totalLaporanCount = \App\Models\Laporan::count();
 
         return response()->json([

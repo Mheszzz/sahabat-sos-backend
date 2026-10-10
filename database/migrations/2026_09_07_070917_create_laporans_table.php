@@ -22,7 +22,7 @@ return new class extends Migration
             $table->text('deskripsi');
             $table->string('foto_laporan')->nullable();
             $table->string('rekam_suara')->nullable();
-            $table->enum('status', ['aktif', 'proses', 'selesai'])->default('aktif');
+            $table->enum('status', ['belum ditangani', 'ditangani', 'selesai'])->default('belum ditangani');
             $table->timestamp('waktu_laporan')->nullable();
             $table->timestamps();
         });

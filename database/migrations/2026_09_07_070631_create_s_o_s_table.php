@@ -18,7 +18,7 @@ return new class extends Migration
             //$table->string('lokasi_sos');
             $table->decimal('latitude', 10, 8);
             $table->decimal('longitude', 11, 8);    
-            $table->enum('status_sos', ['aktif', 'proses', 'selesai','batal'])->default('aktif');
+            $table->enum('status_sos', ['belum ditangani', 'ditangani', 'selesai', 'batal'])->default('belum ditangani');
             $table->string('alasan_batal')->nullable();
             $table->timestamp('waktu_sos')->nullable();
             $table->timestamps();

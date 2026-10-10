@@ -35,7 +35,7 @@ class SOSController extends Controller
 
         // Cek apakah pengguna sudah punya laporan SOS yang masih aktif
         $activeSos = SOS::where('id_pengguna', $userId)
-            ->whereIn('status_sos', ['aktif', 'proses'])
+            ->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
             ->first();
 
         if ($activeSos) {
@@ -49,7 +49,7 @@ class SOSController extends Controller
             'id_pengguna'     => $userId,
             'latitude'        => $lat,
             'longitude'       => $lng,
-            'status_sos'      => 'aktif',
+            'status_sos'      => 'belum ditangani',
             'waktu_sos'       => now(),
             'battery_level'   => $request->battery_level ?? 85,
             'signal_strength' => $request->signal_strength ?? '4G',
@@ -97,7 +97,7 @@ class SOSController extends Controller
     {
         $sos = SOS::with(['pengguna', 'relawan'])
             ->where('id_pengguna', $request->user()->id)
-            ->whereIn('status_sos', ['aktif', 'proses'])
+            ->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
             ->first();
 
         if (!$sos) {
@@ -118,7 +118,7 @@ class SOSController extends Controller
         $userId = $request->user()->id;
 
         $sos = SOS::with('pengguna')
-            ->where('status_sos', 'aktif')
+            ->whereIn('status_sos', ['belum ditangani', 'aktif'])
             ->whereNull('id_relawan')
             ->whereDoesntHave('rejections', function ($query) use ($userId) {
                 $query->where('id_relawan', $userId);
@@ -184,20 +184,20 @@ class SOSController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $request->validate([
-            'status_sos' => 'required|in:proses,selesai',
+            'status_sos' => 'required|in:belum ditangani,ditangani,proses,selesai',
         ]);
 
         $user = $request->user();
         $userId = $user->id;
 
-        // Jika relawan ingin mengambil tugas (ubah status dari 'aktif' ke 'proses')
-        if ($request->status_sos === 'proses') {
+        // Jika relawan ingin mengambil tugas (ubah status ke 'ditangani')
+        if (in_array($request->status_sos, ['ditangani', 'proses'])) {
             
-            // Hanya baris yang masih 'aktif' yang akan ter-update.
+            // Hanya baris yang masih 'belum ditangani' atau 'aktif' yang akan ter-update.
             $updated = SOS::where('id', $id)
-                ->where('status_sos', 'aktif') // Kunci keamanan race condition
+                ->whereIn('status_sos', ['belum ditangani', 'aktif']) // Kunci keamanan race condition
                 ->update([
-                    'status_sos' => 'proses',
+                    'status_sos' => 'ditangani',
                     'id_relawan' => $userId,
                     'updated_at' => now(),
                 ]);
@@ -223,7 +223,7 @@ class SOSController extends Controller
             // Jika statusnya diubah ke 'selesai'
             $sos = SOS::where('id', $id)
                 ->where('id_relawan', $userId) // Pastikan hanya relawan penanggung jawab yang bisa menyelesaikan
-                ->where('status_sos', 'proses')
+                ->whereIn('status_sos', ['ditangani', 'proses'])
                 ->first();
 
             if (!$sos) {
@@ -231,7 +231,7 @@ class SOSController extends Controller
                     'message' => 'Anda tidak memiliki hak untuk menyelesaikan SOS ini atau status SOS tidak valid.'
                 ], 403);
             }
-            $sos->status_sos = $request->status_sos;
+            $sos->status_sos = 'selesai';
             $sos->save();
 
             SOSActivity::record(
@@ -274,7 +274,7 @@ class SOSController extends Controller
 
         $sos = SOS::with(['pengguna', 'relawan', 'activities.user'])
             ->where('id_relawan', $user->id)
-            ->where('status_sos', 'proses')
+            ->whereIn('status_sos', ['ditangani', 'proses'])
             ->first();
 
         if (!$sos) {
@@ -339,7 +339,7 @@ class SOSController extends Controller
 
         $sos = SOS::where('id', $id)
             ->where('id_pengguna', $userId)
-            ->whereIn('status_sos', ['aktif', 'proses'])
+            ->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
             ->first();
 
         if (!$sos) {
@@ -378,7 +378,7 @@ class SOSController extends Controller
         $userId = $user->id;
 
         $sos = SOS::where('id', $id)
-            ->where('status_sos', 'aktif')
+            ->whereIn('status_sos', ['belum ditangani', 'aktif'])
             ->whereNull('id_relawan')
             ->first();
 

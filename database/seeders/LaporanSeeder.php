@@ -47,7 +47,7 @@ class LaporanSeeder extends Seeder
                 'longitude'        => 110.408765,
                 'kategori_laporan' => 'kondisi_medis',
                 'deskripsi'        => 'Pengguna tunanetra terpeleset di trotoar licin tanpa guiding block, mengalami luka lecet dan dislokasi pergelangan tangan, butuh pertolongan pertama.',
-                'status'           => 'aktif',
+                'status'           => 'belum ditangani',
                 'waktu_laporan'    => Carbon::now()->subMinutes(10),
             ],
             [
@@ -58,7 +58,7 @@ class LaporanSeeder extends Seeder
                 'longitude'        => 110.381200,
                 'kategori_laporan' => 'butuh_pendamping',
                 'deskripsi'        => 'Pengguna tunarungu membutuhkan pendamping relawan untuk menyeberang persimpangan lalu lintas padat menuju puskesmas.',
-                'status'           => 'aktif',
+                'status'           => 'belum ditangani',
                 'waktu_laporan'    => Carbon::now()->subMinutes(25),
             ],
             [
@@ -69,7 +69,7 @@ class LaporanSeeder extends Seeder
                 'longitude'        => 110.364500,
                 'kategori_laporan' => 'aksesibilitas_rusak',
                 'deskripsi'        => 'Jalur pemandu disabilitas netra (tactile paving) tertutup tumpukan kayu renovasi toko dan menghalangi pejalan kaki disabilitas.',
-                'status'           => 'aktif',
+                'status'           => 'belum ditangani',
                 'waktu_laporan'    => Carbon::now()->subHours(1),
             ],
             [
@@ -80,7 +80,7 @@ class LaporanSeeder extends Seeder
                 'longitude'        => 110.379800,
                 'kategori_laporan' => 'tersesat',
                 'deskripsi'        => 'Tersesat saat mencari jalur bus menuju kampus, aplikasi navigasi tidak responsif. Butuh panduan arah langsung via teks/chat.',
-                'status'           => 'aktif',
+                'status'           => 'belum ditangani',
                 'waktu_laporan'    => Carbon::now()->subHours(2),
             ],
         ];
@@ -101,7 +101,7 @@ class LaporanSeeder extends Seeder
                 'longitude'        => 110.392400,
                 'kategori_laporan' => 'kondisi_medis',
                 'deskripsi'        => 'Mengalami sesak napas ringan dan kehabisan obat inhaler. Membutuhkan bantuan relawan untuk membelikan obat darurat.',
-                'status'           => 'proses',
+                'status'           => 'ditangani',
                 'waktu_laporan'    => Carbon::now()->subMinutes(45),
                 'catatan'          => 'Relawan Rian Hidayat telah menerima laporan dan sedang membelikan inhaler di apotek terdekat.',
             ],
@@ -113,7 +113,7 @@ class LaporanSeeder extends Seeder
                 'longitude'        => 110.384500,
                 'kategori_laporan' => 'butuh_pendamping',
                 'deskripsi'        => 'Pendampingan administrasi dan mobilitas pengurusan berkas kependudukan di kantor kelurahan setempat.',
-                'status'           => 'proses',
+                'status'           => 'ditangani',
                 'waktu_laporan'    => Carbon::now()->subHours(1)->subMinutes(30),
                 'catatan'          => 'Relawan Annisa Putri telah tiba di lokasi dan saat ini sedang mendampingi pelapor di loket pelayanan kelurahan.',
             ],

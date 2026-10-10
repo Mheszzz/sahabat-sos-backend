@@ -48,7 +48,14 @@ class LaporanController extends Controller
         }
 
         if ($request->has('status')) {
-            $query->where('status', $request->status);
+            $statusInput = strtolower(trim($request->status));
+            $statusFilter = match ($statusInput) {
+                'aktif', 'belum ditangani', 'belum_ditangani' => ['belum ditangani', 'aktif'],
+                'proses', 'ditangani' => ['ditangani', 'proses'],
+                'selesai' => ['selesai'],
+                default => [$statusInput]
+            };
+            $query->whereIn('status', $statusFilter);
         }
 
         $laporans = $query->paginate(15);
@@ -143,7 +150,7 @@ class LaporanController extends Controller
             'deskripsi'        => $finalDeskripsi,
             'foto_laporan'     => $fotoPath,
             'rekam_suara'      => $audioPath,
-            'status'           => 'aktif',
+            'status'           => 'belum ditangani',
             'waktu_laporan'    => now(),
         ]);
 
@@ -214,7 +221,7 @@ class LaporanController extends Controller
         $radius = (float)$request->input('radius', 5.0);
 
         $laporans = Laporan::with(['pengguna', 'relawan'])
-            ->where('status', 'aktif')
+            ->whereIn('status', ['belum ditangani', 'aktif'])
             ->nearby($latitude, $longitude, $radius)
             ->get()
             ->transform(function ($item) {
@@ -295,7 +302,7 @@ class LaporanController extends Controller
         }
 
         $request->validate([
-            'status' => 'required|in:aktif,proses,selesai',
+            'status' => 'required|in:belum ditangani,ditangani,selesai,aktif,proses',
         ]);
 
         $laporan = Laporan::find($id);
@@ -303,8 +310,13 @@ class LaporanController extends Controller
             return response()->json(['message' => 'Laporan tidak ditemukan'], 404);
         }
 
-        $laporan->status = $request->status;
-        if ($user->role === 'relawan' && empty($laporan->id_relawan)) {
+        $targetStatus = match ($request->status) {
+            'aktif'  => 'belum ditangani',
+            'proses' => 'ditangani',
+            default  => $request->status,
+        };
+        $laporan->status = $targetStatus;
+        if (in_array($targetStatus, ['ditangani', 'proses']) && $user->role === 'relawan' && empty($laporan->id_relawan)) {
             $laporan->id_relawan = $user->id;
         }
         $laporan->save();

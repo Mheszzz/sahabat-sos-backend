@@ -17,7 +17,7 @@ class PetaKasusAdminController extends Controller
     {
         // 1. Sinyal SOS Aktif (Urgensi Kritis - Merah)
         $activeSosList = SOS::with(['pengguna', 'relawan'])
-            ->whereIn('status_sos', ['aktif', 'proses'])
+            ->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -38,7 +38,7 @@ class PetaKasusAdminController extends Controller
 
         // 2. Laporan Aktif yang memiliki koordinat GPS (Urgensi Sedang - Kuning)
         $laporanAktifList = Laporan::with(['pengguna', 'relawan'])
-            ->whereIn('status', ['menunggu', 'proses'])
+            ->whereIn('status', ['belum ditangani', 'ditangani', 'menunggu', 'proses', 'aktif'])
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->orderBy('created_at', 'desc')
@@ -65,7 +65,7 @@ class PetaKasusAdminController extends Controller
             ->whereNotNull('longitude')
             ->get()
             ->map(function ($relawan) {
-                $activeSOS = SOS::with('pengguna')->whereIn('status_sos', ['aktif', 'proses'])
+                $activeSOS = SOS::with('pengguna')->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                     ->where('id_relawan', $relawan->id)
                     ->first();
                 $isBusy = $activeSOS !== null;

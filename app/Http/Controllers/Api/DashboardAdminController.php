@@ -34,11 +34,11 @@ class DashboardAdminController extends Controller
         $laporanKemarin = Laporan::whereDate('created_at', $yesterday)->count();
         $laporanTrenPercentage = $this->calculateTrendPercentage($laporanHariIni, $laporanKemarin);
 
-        $daruratSosAktifCount = SOS::whereIn('status_sos', ['aktif', 'proses'])->count();
+        $daruratSosAktifCount = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])->count();
 
         // Relawan stats
         $totalRelawan = User::where('role', 'relawan')->count();
-        $relawanSedangBertugasCount = SOS::whereIn('status_sos', ['aktif', 'proses'])
+        $relawanSedangBertugasCount = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
             ->whereNotNull('id_relawan')
             ->pluck('id_relawan')
             ->unique()
@@ -76,7 +76,7 @@ class DashboardAdminController extends Controller
         // B. Antrean Kasus Darurat (Incident Live Queue)
         // -------------------------------------------------------------
         $activeSosList = SOS::with(['pengguna.kontakDarurat', 'relawan', 'activities.user'])
-            ->whereIn('status_sos', ['aktif', 'proses'])
+            ->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -164,7 +164,7 @@ class DashboardAdminController extends Controller
             ->whereNotNull('longitude')
             ->get()
             ->map(function ($relawan) {
-                $activeSOS = SOS::with('pengguna')->whereIn('status_sos', ['aktif', 'proses'])
+                $activeSOS = SOS::with('pengguna')->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                     ->where('id_relawan', $relawan->id)
                     ->first();
                 $isBusy = $activeSOS !== null;
@@ -321,9 +321,9 @@ class DashboardAdminController extends Controller
             ->get();
 
         $data = $relawans->map(function ($relawan) {
-            $isBusy = SOS::whereIn('status_sos', ['aktif', 'proses'])
+            $isBusy = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                 ->where('id_relawan', $relawan->id)
-                ->exists() || Laporan::whereIn('status', ['aktif', 'proses'])
+                ->exists() || Laporan::whereIn('status', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                 ->where('id_relawan', $relawan->id)
                 ->exists();
 
@@ -401,7 +401,7 @@ class DashboardAdminController extends Controller
 
             $laporan->update([
                 'id_relawan' => $relawan->id,
-                'status'     => 'proses',
+                'status'     => 'ditangani',
             ]);
 
             return response()->json([
@@ -421,7 +421,7 @@ class DashboardAdminController extends Controller
 
         $sos->update([
             'id_relawan' => $relawan->id,
-            'status_sos' => 'proses',
+            'status_sos' => 'ditangani',
         ]);
 
         // Catat aktivitas dispatch relawan oleh admin
