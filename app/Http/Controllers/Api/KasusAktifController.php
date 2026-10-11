@@ -11,7 +11,7 @@ use App\Models\KategoriLaporan;
 use App\Models\User;
 use App\Models\SOSActivity;
 use App\Events\SOSUpdateStatus;
-use App\Http\Controllers\Api\HubungiKontakDaruratController;
+use App\Http\Controllers\Api\HubungiWhatsAppController;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 
@@ -93,10 +93,13 @@ class KasusAktifController extends Controller
 
         $pelaporData = null;
         if ($item->pengguna) {
+            $userWa = HubungiWhatsAppController::formatWhatsAppNumber($item->pengguna->no_telp);
             $pelaporData = [
                 'id'            => $item->pengguna->id,
                 'name'          => $item->pengguna->name,
                 'no_telp'       => $item->pengguna->no_telp,
+                'no_telp_wa'    => $userWa,
+                'whatsapp_url'  => $userWa ? "https://wa.me/{$userWa}" : null,
                 'foto_profile'  => $item->pengguna->foto_profile_url ?? ($item->pengguna->foto_profile ? url('storage/' . $item->pengguna->foto_profile) : null),
                 'kategori_user' => $item->pengguna->kategori_user ?? 'umum',
             ];
@@ -106,8 +109,8 @@ class KasusAktifController extends Controller
 
                 $pelaporData['kontak_darurat'] = $kontakList;
                 if ($kontakUtama) {
-                    $waNumber = HubungiKontakDaruratController::formatWhatsAppNumber($kontakUtama->no_telp);
-                    $pesan = HubungiKontakDaruratController::generateWhatsAppMessage($item, $tipe, $item->pengguna, $kontakUtama);
+                    $waNumber = HubungiWhatsAppController::formatWhatsAppNumber($kontakUtama->no_telp);
+                    $pesan = HubungiWhatsAppController::generateWhatsAppMessage($item, $tipe, $item->pengguna, $kontakUtama);
                     $encoded = rawurlencode($pesan);
 
                     $pelaporData['kontak_darurat_utama'] = [

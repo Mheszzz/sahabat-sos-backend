@@ -16,7 +16,7 @@ use App\Http\Controllers\Api\PetaKasusAdminController;
 use App\Http\Controllers\Api\SebaranUrgensiAdminController;
 use App\Http\Controllers\Api\RelawanLocationController;
 use App\Http\Controllers\Api\KasusAktifController;
-use App\Http\Controllers\Api\HubungiKontakDaruratController;
+use App\Http\Controllers\Api\HubungiWhatsAppController;
 use App\Http\Controllers\Api\BerandaRelawanController;
 
 // Public Authentication Routes
@@ -104,6 +104,10 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::get('/sos/relawan/tasks', [SOSController::class, 'activeTask']); // menampilkan SOS yang sedang ditangani 
         Route::patch('/sos/{id}/status', [SOSController::class, 'updateStatus']); // mengubah status SOS (proses/selesai)
         Route::post('/sos/{id}/reject', [SOSController::class, 'rejectSOS']); // menolak SOS yang ditawarkan
+
+        // Chat WhatsApp Pengguna (Korban/Pelapor) oleh Relawan
+        Route::match(['get', 'post'], '/relawan/chat-wa/{tipe}/{id}', [HubungiWhatsAppController::class, 'hubungiPengguna']);
+        Route::match(['get', 'post'], '/relawan/tugas/{tipe}/{id}/chat-wa', [HubungiWhatsAppController::class, 'hubungiPengguna']);
     });
 
     // Route Khusus Admin & Superadmin (Beranda Admin, Command Center, Verifikasi Relawan, & Kelola Opsi Laporan)
@@ -150,8 +154,9 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::get('/tugas-aktif/{tipe}/{id}', [KasusAktifController::class, 'show']);
         Route::post('/tugas-aktif/{tipe}/{id}/dispatch', [KasusAktifController::class, 'dispatchRelawan']);
         Route::patch('/tugas-aktif/{tipe}/{id}/status', [KasusAktifController::class, 'tanganiKasus']);
-        Route::match(['get', 'post'], '/tugas-aktif/{tipe}/{id}/hubungi-kontak-darurat', [HubungiKontakDaruratController::class, 'hubungi']);
-        Route::get('/tugas-aktif/{tipe}/{id}/kontak-darurat', [HubungiKontakDaruratController::class, 'hubungi']);
+        Route::match(['get', 'post'], '/tugas-aktif/{tipe}/{id}/hubungi-kontak-darurat', [HubungiWhatsAppController::class, 'hubungi']);
+        Route::get('/tugas-aktif/{tipe}/{id}/kontak-darurat', [HubungiWhatsAppController::class, 'hubungi']);
+        Route::match(['get', 'post'], '/tugas-aktif/{tipe}/{id}/chat-pengguna', [HubungiWhatsAppController::class, 'hubungiPengguna']);
 
         // Riwayat Kasus Selesai (Audit Admin)
         Route::get('/admin/riwayat-kasus', [KasusAktifController::class, 'riwayatAdmin']);
