@@ -111,6 +111,22 @@ class User extends Authenticatable
     }
 
     /**
+     * Scope query untuk relawan yang berstatus ketersediaan 'tersedia'.
+     */
+    public function scopeTersedia($query)
+    {
+        return $query->where('status_ketersediaan', 'tersedia');
+    }
+
+    /**
+     * Alias scopeSiaga untuk backwards-compatibility.
+     */
+    public function scopeSiaga($query)
+    {
+        return $this->scopeTersedia($query);
+    }
+
+    /**
      * Cek apakah data profil pengguna/relawan sudah lengkap
      */
     public function isProfileComplete(): bool

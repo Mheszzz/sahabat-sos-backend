@@ -44,28 +44,29 @@ class EscalateSOSJob implements ShouldQueue
         // Ambil relawan yang telah menolak SOS ini agar tidak dikirimi notifikasi kembali
         $rejectedRelawanIds = SOSRejection::where('id_sos', $sos->id)->pluck('id_relawan')->toArray();
 
-        // Cari semua relawan dalam target radius
+        // Cari semua relawan tersedia dalam target radius
         $volunteers = User::where('role', 'relawan')
+            ->where('status_ketersediaan', 'tersedia')
             ->nearby($lat, $lng, $this->targetRadius)
             ->whereNotIn('id', $rejectedRelawanIds)
             ->get();
 
         $volunteerIds = $volunteers->pluck('id')->toArray();
 
-        Log::info("Eskalasi SOS ID {$this->sosId}: Ditemukan {$volunteers->count()} relawan dalam radius {$this->targetRadius} km.");
+        Log::info("Eskalasi SOS ID {$this->sosId}: Ditemukan {$volunteers->count()} relawan tersedia dalam radius {$this->targetRadius} km.");
 
         if ($volunteers->isNotEmpty()) {
-            // Broadcast sinyal SOS ke seluruh relawan di radius target
+            // Broadcast sinyal SOS ke seluruh relawan tersedia di radius target
             broadcast(new SOSCreated($sos, $volunteerIds, $this->targetRadius))->toOthers();
 
-            Log::info("Eskalasi SOS ID {$this->sosId} berhasil di-broadcast ke {$volunteers->count()} relawan (radius {$this->targetRadius} km)!");
+            Log::info("Eskalasi SOS ID {$this->sosId} berhasil di-broadcast ke {$volunteers->count()} relawan tersedia (radius {$this->targetRadius} km)!");
         }
 
         // Catat aktivitas eskalasi ke riwayat SOS
         SOSActivity::record(
             $sos->id,
             'sos_eskalasi',
-            "Panggilan SOS dieskalasikan ke radius {$this->targetRadius} km ({$volunteers->count()} relawan terdeteksi)",
+            "Panggilan SOS dieskalasikan ke radius {$this->targetRadius} km ({$volunteers->count()} relawan tersedia terdeteksi)",
             null,
             [
                 'radius'        => $this->targetRadius,
