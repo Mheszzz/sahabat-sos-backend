@@ -9,7 +9,7 @@ use App\Models\Laporan;
 use App\Models\Kontak_darurat;
 use App\Models\SOSActivity;
 
-class HubungiKontakDaruratController extends Controller
+class HubungiWhatsAppController extends Controller
 {
     /**
      * Format nomor telepon ke standar nomor WhatsApp internasional (62xxx)
@@ -39,7 +39,7 @@ class HubungiKontakDaruratController extends Controller
     }
 
     /**
-     * Susun template pesan darurat WhatsApp yang informatif dan resmi
+     * Susun template pesan darurat WhatsApp untuk Kontak Darurat (Keluarga)
      */
     public static function generateWhatsAppMessage($kasus, string $tipe, $pengguna, $kontak, ?string $customPesan = null): string
     {
@@ -109,7 +109,52 @@ class HubungiKontakDaruratController extends Controller
     }
 
     /**
-     * HUBUNGI KONTAK DARURAT DARI KASUS (SOS / LAPORAN) KE WHATSAPP
+     * Susun template pesan WhatsApp dari Relawan/Petugas ke Pengguna (Korban/Pelapor)
+     */
+    public static function generateWhatsAppMessagePengguna($kasus, string $tipe, $pengguna, $petugas, ?string $customPesan = null): string
+    {
+        $isSos = strtolower($tipe) === 'sos';
+        $jenisKasus = $isSos 
+            ? 'Panggilan Darurat SOS' 
+            : ('Laporan: ' . KasusAktifController::getJenisLaporan('laporan', $kasus->kategori_laporan));
+
+        $namaPengguna = $pengguna->name ?? 'Kakak';
+        $namaPetugas = $petugas->name ?? 'Relawan';
+        $roleLabel = ($petugas->role === 'relawan') ? 'Relawan' : 'Petugas';
+
+        $lines = [];
+        if ($isSos) {
+            $lines[] = "🚨 *PENDAMPINGAN DARURAT - SAHABAT SOS* 🚨";
+            $lines[] = "";
+            $lines[] = "Halo Kak *{$namaPengguna}*,";
+            $lines[] = "Saya *{$namaPetugas}* ({$roleLabel} Sahabat SOS) yang sedang menangani panggilan darurat SOS Anda.";
+            $lines[] = "";
+            $lines[] = "Saat ini saya sedang menuju lokasi / memproses bantuan untuk Kakak.";
+            $lines[] = "Mohon tetap tenang, pastikan posisi Anda aman, dan jika memungkinkan balas pesan ini untuk memberikan patokan lokasi atau kondisi terkini.";
+        } else {
+            $lines[] = "📋 *TINDAK LANJUT LAPORAN - SAHABAT SOS* 📋";
+            $lines[] = "";
+            $lines[] = "Halo Kak *{$namaPengguna}*,";
+            $lines[] = "Saya *{$namaPetugas}* ({$roleLabel} Sahabat SOS) yang bertugas menindaklanjuti laporan Anda terkait *{$jenisKasus}*.";
+            $lines[] = "";
+            $lines[] = "Saat ini laporan Anda sedang saya tangani. Mohon konfirmasi apakah kondisi saat ini masih sesuai dengan laporan, atau jika ada informasi tambahan yang ingin disampaikan.";
+        }
+
+        // Jika ada pesan/catatan kustom
+        if (!empty($customPesan)) {
+            $lines[] = "";
+            $lines[] = "💬 *Catatan Khusus*:";
+            $lines[] = $customPesan;
+        }
+
+        $lines[] = "";
+        $lines[] = "Terima kasih, kami siap membantu.";
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * 1. HUBUNGI KONTAK DARURAT DARI KASUS (SOS / LAPORAN) KE WHATSAPP (Keluarga)
      * GET  /api/tugas-aktif/{tipe}/{id}/kontak-darurat
      * POST /api/tugas-aktif/{tipe}/{id}/hubungi-kontak-darurat
      * GET  /api/tugas-aktif/{tipe}/{id}/hubungi-kontak-darurat
@@ -174,15 +219,12 @@ class HubungiKontakDaruratController extends Controller
             ], 404);
         }
 
-        // Cari kontak darurat yang bertipe 'utama' (sesuai spesifikasi di KontakDaruratController)
+        // Cari kontak darurat yang bertipe 'utama'
         $kontakUtama = $kontakList->firstWhere('tipe', 'utama');
 
         // Pesan kustom tambahan jika diberikan oleh admin
         $customPesan = $request->input('pesan') ?? $request->input('custom_pesan') ?? $request->input('catatan');
 
-        // Tentukan target kontak:
-        // Prioritas pertama: jika admin memilih kontak_id tertentu secara eksplisit
-        // Prioritas utama/default: WAJIB memilih kontak dengan tipe 'utama' (atau fallback ke kontak pertama jika belum diset utama)
         $selectedKontakId = $request->input('kontak_id') ?? $request->input('kontak_darurat_id') ?? $request->query('kontak_id');
         $targetKontak = null;
 
@@ -276,10 +318,140 @@ class HubungiKontakDaruratController extends Controller
     }
 
     /**
+     * 2. HUBUNGI PENGGUNA (KORBAN/PELAPOR) LANGSUNG VIA WHATSAPP OLEH RELAWAN / ADMIN
+     * GET  /api/relawan/chat-wa/{tipe}/{id}
+     * POST /api/relawan/chat-wa/{tipe}/{id}
+     * GET  /api/tugas-aktif/{tipe}/{id}/chat-pengguna
+     */
+    public function hubungiPengguna(Request $request, $tipe, $id)
+    {
+        $user = $request->user();
+        $tipeLower = strtolower($tipe);
+        $kasus = null;
+
+        if ($tipeLower === 'laporan') {
+            $kasus = Laporan::with(['pengguna', 'relawan'])->find($id);
+        } elseif ($tipeLower === 'sos') {
+            $kasus = SOS::with(['pengguna', 'relawan'])->find($id);
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => "Tipe tidak valid. Gunakan 'laporan' atau 'sos'."
+            ], 400);
+        }
+
+        if (!$kasus) {
+            return response()->json([
+                'success' => false,
+                'message' => ucfirst($tipe) . ' tidak ditemukan'
+            ], 404);
+        }
+
+        // Validasi Otorisasi:
+        // Relawan hanya boleh menghubungi jika dia adalah relawan yang menangani kasus ini.
+        // Admin/Superadmin boleh menghubungi kapan saja untuk koordinasi.
+        $isAdmin = in_array($user->role, ['admin', 'superadmin']) || 
+                   $user->hasPermission('kelola_laporan') || 
+                   $user->hasPermission('pantau_peta');
+
+        $isAssignedRelawan = ($user->role === 'relawan' && (int)$kasus->id_relawan === (int)$user->id);
+
+        if (!$isAdmin && !$isAssignedRelawan) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Anda bukan relawan penanggung jawab kasus ini.'
+            ], 403);
+        }
+
+        $pengguna = $kasus->pengguna;
+        if (!$pengguna) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data pengguna/pelapor untuk kasus ini tidak ditemukan.'
+            ], 404);
+        }
+
+        if (empty($pengguna->no_telp)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pengguna ini belum mencantumkan nomor telepon.'
+            ], 422);
+        }
+
+        $waNumber = self::formatWhatsAppNumber($pengguna->no_telp);
+        if (!$waNumber) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Format nomor telepon pengguna tidak valid untuk WhatsApp.'
+            ], 422);
+        }
+
+        // Pesan kustom opsional dari request
+        $customPesan = $request->input('pesan') ?? $request->input('custom_pesan') ?? $request->query('pesan');
+
+        // Susun template pesan
+        $pesan = self::generateWhatsAppMessagePengguna($kasus, $tipeLower, $pengguna, $user, $customPesan);
+        $encodedText = rawurlencode($pesan);
+
+        $whatsappUrl = "https://wa.me/{$waNumber}?text={$encodedText}";
+        $whatsappWebUrl = "https://web.whatsapp.com/send?phone={$waNumber}&text={$encodedText}";
+
+        // Catat aktivitas jika kasus SOS
+        if ($tipeLower === 'sos') {
+            $peranLabel = ($user->role === 'relawan') ? 'Relawan' : 'Admin';
+            SOSActivity::record(
+                $kasus->id,
+                'chat_wa_pengguna',
+                "{$peranLabel} {$user->name} membuka chat WhatsApp dengan pengguna {$pengguna->name} ({$pengguna->no_telp})",
+                $user->id,
+                [
+                    'id_pengguna' => $pengguna->id,
+                    'nama'        => $pengguna->name,
+                    'no_telp'     => $pengguna->no_telp,
+                    'no_telp_wa'  => $waNumber,
+                ]
+            );
+        }
+
+        $fotoProfileUrl = $pengguna->foto_profile_url ?? ($pengguna->foto_profile ? url('storage/' . $pengguna->foto_profile) : null);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Berhasil menyiapkan tautan WhatsApp pengguna {$pengguna->name}",
+            'data'    => [
+                'kasus_id'         => (int) $kasus->id,
+                'tipe'             => $tipeLower,
+                'status'           => KasusAktifController::formatStatus($tipeLower === 'sos' ? $kasus->status_sos : $kasus->status),
+                'pengguna'         => [
+                    'id'                => $pengguna->id,
+                    'nama'              => $pengguna->name,
+                    'no_telp'           => $pengguna->no_telp,
+                    'no_telp_wa'        => $waNumber,
+                    'foto_profile'      => $fotoProfileUrl,
+                    'kategori_user'     => $pengguna->kategori_user ?? 'umum',
+                    'metode_komunikasi' => $pengguna->metode_komunikasi ?? null,
+                    'catatan_medis'     => $pengguna->catatan_medis ?? null,
+                ],
+                'pesan_wa'         => $pesan,
+                'whatsapp_url'     => $whatsappUrl,
+                'whatsapp_web_url' => $whatsappWebUrl,
+            ]
+        ], 200);
+    }
+
+    /**
      * Alias method untuk fleksibilitas
      */
     public function hubungiKontakDarurat(Request $request, $tipe, $id)
     {
         return $this->hubungi($request, $tipe, $id);
+    }
+
+    /**
+     * Alias method untuk chat pengguna
+     */
+    public function chatPengguna(Request $request, $tipe, $id)
+    {
+        return $this->hubungiPengguna($request, $tipe, $id);
     }
 }

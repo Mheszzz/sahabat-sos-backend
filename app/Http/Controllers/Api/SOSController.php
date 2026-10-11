@@ -70,14 +70,15 @@ class SOSController extends Controller
             ]
         );
 
-        // 1. Tahap 1: Broadcast ke semua relawan dalam radius 2 km
+        // 1. Tahap 1: Broadcast ke semua relawan tersedia dalam radius 2 km
         $volunteers2km = User::where('role', 'relawan')
+            ->where('status_ketersediaan', 'tersedia')
             ->nearby($lat, $lng, 2.0)
             ->get();
 
         $volunteerIds = $volunteers2km->pluck('id')->toArray();
 
-        Log::info("SOS ID {$sos->id}: Memulai broadcast tahap 1 (radius 2 km). Ditemukan {$volunteers2km->count()} relawan.");
+        Log::info("SOS ID {$sos->id}: Memulai broadcast tahap 1 (radius 2 km). Ditemukan {$volunteers2km->count()} relawan tersedia.");
 
         if ($volunteers2km->isNotEmpty()) {
             broadcast(new SOSCreated($sos, $volunteerIds, 2.0))->toOthers();
