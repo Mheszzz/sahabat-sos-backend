@@ -181,6 +181,7 @@ class SOSController extends Controller
             'total'        => $activities->count(),
             'activity_log' => $activities,
             'activities'   => $activities,
+            'data'         => $activities,
         ]);
     }
 
