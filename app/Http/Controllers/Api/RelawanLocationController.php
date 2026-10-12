@@ -46,7 +46,7 @@ class RelawanLocationController extends Controller
 
         // 2. REVERB & MAPBOX OFF-ROUTE CHECK
         $activeSos = SOS::where('id_relawan', $user->id)
-            ->whereIn('status_sos', ['ditangani', 'proses'])
+            ->where('status_sos', 'ditangani')
             ->first();
 
         $newRouteData = null;

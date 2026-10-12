@@ -35,7 +35,7 @@ class SOSController extends Controller
 
         // Cek apakah pengguna sudah punya laporan SOS yang masih aktif
         $activeSos = SOS::where('id_pengguna', $userId)
-            ->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
+            ->whereIn('status_sos', ['belum ditangani', 'ditangani'])
             ->first();
 
         if ($activeSos) {
@@ -81,10 +81,12 @@ class SOSController extends Controller
         Log::info("SOS ID {$sos->id}: Memulai broadcast tahap 1 (radius 2 km). Ditemukan {$volunteers2km->count()} relawan tersedia.");
 
         if ($volunteers2km->isNotEmpty()) {
-            broadcast(new SOSCreated($sos, $volunteerIds, 2.0))->toOthers();
+            broadcast(new SOSCreated($sos, $volunteerIds, 2.0));
+        } else {
+            Log::info("SOS ID {$sos->id}: Belum ada relawan tersedia dalam radius 2 km. Menunggu eskalasi berkala.");
         }
 
-        // 2. Tahap 2: Tunggu 30 detik, jika belum ada yang menerima, eskalasi ke radius 3 km
+        // 2. Tahap 2: Tunggu 30 detik, jika belum ada yang menerima, eskalasi bertingkat ke radius 3 km
         EscalateSOSJob::dispatch($sos->id, 3.0)->delay(now()->addSeconds(30));
 
         return response()->json([
@@ -98,7 +100,7 @@ class SOSController extends Controller
     {
         $sos = SOS::with(['pengguna', 'relawan'])
             ->where('id_pengguna', $request->user()->id)
-            ->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
+            ->whereIn('status_sos', ['belum ditangani', 'ditangani'])
             ->first();
 
         if (!$sos) {
@@ -185,14 +187,14 @@ class SOSController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $request->validate([
-            'status_sos' => 'required|in:belum ditangani,ditangani,proses,selesai',
+            'status_sos' => 'required|in:belum ditangani,ditangani,selesai,batal',
         ]);
 
         $user = $request->user();
         $userId = $user->id;
 
         // Jika relawan ingin mengambil tugas (ubah status ke 'ditangani')
-        if (in_array($request->status_sos, ['ditangani', 'proses'])) {
+        if ($request->status_sos === 'ditangani') {
             
             // Hanya baris yang masih 'belum ditangani' atau 'aktif' yang akan ter-update.
             $updated = SOS::where('id', $id)
@@ -224,7 +226,7 @@ class SOSController extends Controller
             // Jika statusnya diubah ke 'selesai'
             $sos = SOS::where('id', $id)
                 ->where('id_relawan', $userId) // Pastikan hanya relawan penanggung jawab yang bisa menyelesaikan
-                ->whereIn('status_sos', ['ditangani', 'proses'])
+                ->where('status_sos', 'ditangani')
                 ->first();
 
             if (!$sos) {
@@ -247,7 +249,7 @@ class SOSController extends Controller
         $sos->load(['pengguna', 'relawan', 'activities.user']);
 
         // Broadcast update ke Reverb (WebSocket)
-        broadcast(new SOSUpdateStatus($sos))->toOthers();
+        broadcast(new SOSUpdateStatus($sos));
 
         $data = $sos->toArray();
         $data['activity_log'] = $sos->activities->map(function ($act) {
@@ -275,7 +277,7 @@ class SOSController extends Controller
 
         $sos = SOS::with(['pengguna', 'relawan', 'activities.user'])
             ->where('id_relawan', $user->id)
-            ->whereIn('status_sos', ['ditangani', 'proses'])
+            ->where('status_sos', 'ditangani')
             ->first();
 
         if (!$sos) {
@@ -340,7 +342,7 @@ class SOSController extends Controller
 
         $sos = SOS::where('id', $id)
             ->where('id_pengguna', $userId)
-            ->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
+            ->whereIn('status_sos', ['belum ditangani', 'ditangani'])
             ->first();
 
         if (!$sos) {
@@ -364,7 +366,7 @@ class SOSController extends Controller
 
         $sos->load(['pengguna', 'relawan']);
 
-        broadcast(new SOSUpdateStatus($sos))->toOthers();
+        broadcast(new SOSUpdateStatus($sos));
 
         return response()->json([
             'message' => 'Sinyal SOS berhasil dibatalkan.',

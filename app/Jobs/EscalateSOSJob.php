@@ -31,10 +31,25 @@ class EscalateSOSJob implements ShouldQueue
     {
         $sos = SOS::find($this->sosId);
 
-        // Jika SOS tidak ditemukan, atau sudah bukan 'belum ditangani'/'aktif' (sudah 'ditangani'/'proses', 'selesai', atau 'batal'),
+        // Jika SOS tidak ditemukan, atau status bukan 'belum ditangani',
         // atau sudah ada relawan yang mengambil tugas (id_relawan tidak null), hentikan eskalasi!
-        if (!$sos || !in_array($sos->status_sos, ['belum ditangani', 'aktif']) || !is_null($sos->id_relawan)) {
-            Log::info("Eskalasi SOS ID {$this->sosId} (radius {$this->targetRadius} km) dibatalkan karena SOS sudah diproses/ditangani, selesai, atau dibatalkan.");
+        if (!$sos || $sos->status_sos !== 'belum ditangani' || !is_null($sos->id_relawan)) {
+            Log::info("Eskalasi SOS ID {$this->sosId} (radius {$this->targetRadius} km) dibatalkan karena SOS sudah ditangani, selesai, atau dibatalkan.");
+            return;
+        }
+
+        // Jika targetRadius <= 0, ini adalah tahap akhir (broadcast umum ke seluruh relawan siaga)
+        if ((float) $this->targetRadius <= 0.0) {
+            broadcast(new SOSCreated($sos, null, null));
+            Log::info("Eskalasi tahap akhir SOS ID {$this->sosId}: Broadcast umum ke semua relawan siaga (relawan-channel).");
+
+            SOSActivity::record(
+                $sos->id,
+                'sos_eskalasi',
+                "Panggilan SOS dieskalasikan ke seluruh relawan siaga (broadcast umum)",
+                null,
+                ['radius' => 'seluruh relawan']
+            );
             return;
         }
 
@@ -57,7 +72,7 @@ class EscalateSOSJob implements ShouldQueue
 
         if ($volunteers->isNotEmpty()) {
             // Broadcast sinyal SOS ke seluruh relawan tersedia di radius target
-            broadcast(new SOSCreated($sos, $volunteerIds, $this->targetRadius))->toOthers();
+            broadcast(new SOSCreated($sos, $volunteerIds, $this->targetRadius));
 
             Log::info("Eskalasi SOS ID {$this->sosId} berhasil di-broadcast ke {$volunteers->count()} relawan tersedia (radius {$this->targetRadius} km)!");
         }
@@ -76,10 +91,16 @@ class EscalateSOSJob implements ShouldQueue
         );
 
         // Alur eskalasi bertingkat:
-        // Jika saat ini di radius 3 km dan belum ada yang menerima, jadwalkan eskalasi berikutnya ke radius 5 km setelah 30 detik
+        // 2 km (awal di controller) -> 3 km (30s) -> 5 km (60s) -> 10 km (90s) -> Umum / Seluruh Relawan (120s)
         if ((float) $this->targetRadius === 3.0) {
             EscalateSOSJob::dispatch($sos->id, 5.0)->delay(now()->addSeconds(30));
             Log::info("SOS ID {$this->sosId}: Menjadwalkan eskalasi tahap berikutnya ke radius 5 km dalam 30 detik.");
+        } elseif ((float) $this->targetRadius === 5.0) {
+            EscalateSOSJob::dispatch($sos->id, 10.0)->delay(now()->addSeconds(30));
+            Log::info("SOS ID {$this->sosId}: Menjadwalkan eskalasi tahap berikutnya ke radius 10 km dalam 30 detik.");
+        } elseif ((float) $this->targetRadius === 10.0) {
+            EscalateSOSJob::dispatch($sos->id, 0.0)->delay(now()->addSeconds(30));
+            Log::info("SOS ID {$this->sosId}: Menjadwalkan eskalasi tahap akhir (broadcast umum) dalam 30 detik.");
         }
     }
 }

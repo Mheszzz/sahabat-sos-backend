@@ -197,6 +197,15 @@ class BerandaRelawanController extends Controller
         ]);
 
         $user = $request->user();
+
+        // Validasi: relawan harus sudah terverifikasi admin untuk dapat mengaktifkan status "tersedia"
+        if ($request->status_ketersediaan === 'tersedia' && $user->status_verifikasi !== 'terverifikasi') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akun relawan Anda belum diverifikasi oleh admin. Tidak dapat mengaktifkan status siaga.',
+            ], 403);
+        }
+
         $user->update([
             'status_ketersediaan' => $request->status_ketersediaan
         ]);
