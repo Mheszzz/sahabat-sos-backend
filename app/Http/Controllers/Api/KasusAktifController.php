@@ -310,9 +310,9 @@ class KasusAktifController extends Controller
         $tipeLower = strtolower($tipe);
 
         if ($tipeLower === 'laporan') {
-            $data = Laporan::with(['pengguna.kontakDarurat', 'relawan'])->find($id);
+            $data = Laporan::with(['pengguna.kontakDarurat', 'relawan', 'catatanPenanganan.admin'])->find($id);
         } elseif ($tipeLower === 'sos') {
-            $data = SOS::with(['pengguna.kontakDarurat', 'relawan'])->find($id);
+            $data = SOS::with(['pengguna.kontakDarurat', 'relawan', 'catatanPenanganan.admin'])->find($id);
         } else {
             return response()->json([
                 'message' => "Tipe tidak valid. Gunakan 'laporan' atau 'sos'."
@@ -373,7 +373,7 @@ class KasusAktifController extends Controller
 
             return response()->json([
                 'message' => "Relawan {$relawan->name} berhasil ditugaskan ke Laporan #{$laporan->id}",
-                'data'    => self::transformItem($laporan->fresh(['pengguna', 'relawan']), 'laporan', true),
+                'data'    => self::transformItem($laporan->fresh(['pengguna', 'relawan', 'catatanPenanganan.admin']), 'laporan', true),
             ], 200);
 
         } elseif ($tipe === 'sos') {
@@ -402,11 +402,11 @@ class KasusAktifController extends Controller
                 ]
             );
 
-            broadcast(new SOSUpdateStatus($sos))->toOthers();
+            broadcast(new SOSUpdateStatus($sos));
 
             return response()->json([
                 'message' => "Relawan {$relawan->name} berhasil ditugaskan ke Kasus SOS #{$sos->id}",
-                'data'    => self::transformItem($sos->fresh(['pengguna', 'relawan']), 'sos', true),
+                'data'    => self::transformItem($sos->fresh(['pengguna', 'relawan', 'catatanPenanganan.admin']), 'sos', true),
             ], 200);
         }
 
@@ -472,14 +472,6 @@ class KasusAktifController extends Controller
                     'message' => 'Laporan ini sudah dalam status proses penanganan.'
                 ], 422);
             }
-
-            // Jika mau diselesaikan tapi sedang ditangani oleh relawan (bukan admin ini)
-            if (!empty($laporan->id_relawan) && $laporan->id_relawan !== $user->id) {
-                $namaRelawan = $laporan->relawan?->name ?? 'Relawan';
-                return response()->json([
-                    'message' => "Laporan ini sedang ditangani oleh relawan {$namaRelawan}. Admin tidak dapat mengubah statusnya."
-                ], 422);
-            }
         }
 
         // 2. Jika kasus masih aktif/belum ditangani tetapi sudah ada relawan yang ditugaskan
@@ -512,7 +504,7 @@ class KasusAktifController extends Controller
         return response()->json([
             'message' => "Laporan berhasil diubah menjadi {$targetStatus}",
             'data'    => [
-                'kasus'   => self::transformItem($laporan->fresh(['pengguna', 'relawan']), 'laporan', true),
+                'kasus'   => self::transformItem($laporan->fresh(['pengguna', 'relawan', 'catatanPenanganan.admin']), 'laporan', true),
                 'catatan' => $catatan,
             ]
         ]);
@@ -540,14 +532,6 @@ class KasusAktifController extends Controller
             if (in_array($targetStatus, ['ditangani', 'proses'])) {
                 return response()->json([
                     'message' => 'Kasus SOS ini sudah dalam status proses penanganan.'
-                ], 422);
-            }
-
-            // Jika mau diselesaikan tapi sedang ditangani oleh relawan (bukan admin ini)
-            if (!empty($sos->id_relawan) && $sos->id_relawan !== $user->id) {
-                $namaRelawan = $sos->relawan?->name ?? 'Relawan';
-                return response()->json([
-                    'message' => "Kasus SOS ini sedang ditangani oleh relawan {$namaRelawan}. Admin tidak dapat mengubah statusnya."
                 ], 422);
             }
         }
@@ -591,12 +575,12 @@ class KasusAktifController extends Controller
             ]);
         }
 
-        broadcast(new SOSUpdateStatus($sos))->toOthers();
+        broadcast(new SOSUpdateStatus($sos));
 
         return response()->json([
             'message' => "SOS berhasil diubah menjadi {$targetStatus}",
             'data'    => [
-                'kasus'   => self::transformItem($sos->fresh(['pengguna', 'relawan']), 'sos', true),
+                'kasus'   => self::transformItem($sos->fresh(['pengguna', 'relawan', 'catatanPenanganan.admin']), 'sos', true),
                 'catatan' => $catatan,
             ]
         ]);

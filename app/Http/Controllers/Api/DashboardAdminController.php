@@ -289,46 +289,78 @@ class DashboardAdminController extends Controller
      */
     public function getQuickDispatchRelawan(Request $request)
     {
-        $lat = $request->query('latitude');
-        $lng = $request->query('longitude');
-        $sosId = $request->query('sos_id');
+        $lat = $request->query('latitude') ?? $request->query('lat');
+        $lng = $request->query('longitude') ?? $request->query('lng');
+        $sosId = $request->query('sos_id') ?? $request->query('id_sos');
         $laporanId = $request->query('laporan_id') ?? $request->query('id_laporan');
-
-        if ($sosId && (!$lat || !$lng)) {
-            $sos = SOS::find($sosId);
-            if ($sos) {
-                $lat = $sos->latitude;
-                $lng = $sos->longitude;
-            }
-        } elseif ($laporanId && (!$lat || !$lng)) {
-            $laporan = Laporan::find($laporanId);
-            if ($laporan) {
-                $lat = $laporan->latitude;
-                $lng = $laporan->longitude;
-            }
-        }
+        $kasusId = $request->query('kasus_id') ?? $request->query('id');
+        $tipe = strtolower($request->query('tipe', $request->query('type', '')));
 
         if (!$lat || !$lng) {
-            return response()->json([
-                'message' => 'Parameter latitude dan longitude atau sos_id / laporan_id diperlukan',
-            ], 422);
+            if ($sosId) {
+                $sos = SOS::find($sosId);
+                if ($sos && $sos->latitude && $sos->longitude) {
+                    $lat = $sos->latitude;
+                    $lng = $sos->longitude;
+                }
+            } elseif ($laporanId) {
+                $laporan = Laporan::find($laporanId);
+                if ($laporan && $laporan->latitude && $laporan->longitude) {
+                    $lat = $laporan->latitude;
+                    $lng = $laporan->longitude;
+                }
+            } elseif ($kasusId) {
+                if ($tipe === 'laporan' || Laporan::where('id', $kasusId)->exists()) {
+                    $laporan = Laporan::find($kasusId);
+                    if ($laporan && $laporan->latitude && $laporan->longitude) {
+                        $lat = $laporan->latitude;
+                        $lng = $laporan->longitude;
+                    }
+                } else {
+                    $sos = SOS::find($kasusId);
+                    if ($sos && $sos->latitude && $sos->longitude) {
+                        $lat = $sos->latitude;
+                        $lng = $sos->longitude;
+                    }
+                }
+            }
         }
 
-        $relawans = User::where('role', 'relawan')
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
-            ->nearby((float)$lat, (float)$lng, 10.0)
-            ->get();
+        $hasCoordinates = !empty($lat) && !empty($lng);
+        $relawans = collect();
 
-        $data = $relawans->map(function ($relawan) {
+        if ($hasCoordinates) {
+            $relawans = User::where('role', 'relawan')
+                ->whereNotNull('latitude')
+                ->whereNotNull('longitude')
+                ->nearby((float)$lat, (float)$lng, 10.0)
+                ->get();
+        }
+
+        $isFallback = false;
+        // Fallback jika koordinat tidak ada ATAU tidak ada relawan di dalam radius 10 km
+        if (!$hasCoordinates || $relawans->isEmpty()) {
+            $isFallback = true;
+            $relawans = User::where('role', 'relawan')
+                ->orderByRaw("CASE WHEN status_ketersediaan = 'tersedia' THEN 1 ELSE 2 END")
+                ->latest()
+                ->get();
+        }
+
+        $data = $relawans->map(function ($relawan) use ($hasCoordinates, $isFallback) {
             $isBusy = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                 ->where('id_relawan', $relawan->id)
                 ->exists() || Laporan::whereIn('status', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                 ->where('id_relawan', $relawan->id)
                 ->exists();
 
-            $distanceKm = isset($relawan->distance) ? round((float)$relawan->distance, 2) : 0;
-            $distanceText = $distanceKm < 1 ? round($distanceKm * 1000) . ' m' : "{$distanceKm} km";
+            $distanceKm = null;
+            $distanceText = '-';
+
+            if ($hasCoordinates && !$isFallback && isset($relawan->distance)) {
+                $distanceKm = round((float)$relawan->distance, 2);
+                $distanceText = $distanceKm < 1 ? round($distanceKm * 1000) . ' m' : "{$distanceKm} km";
+            }
 
             return [
                 'id'            => $relawan->id,
@@ -338,13 +370,15 @@ class DashboardAdminController extends Controller
                 'jarak_km'      => $distanceKm,
                 'jarak_text'    => $distanceText,
                 'status'        => $isBusy ? 'sedang_bertugas' : 'siaga',
-                'latitude'      => (float)$relawan->latitude,
-                'longitude'     => (float)$relawan->longitude,
+                'latitude'      => $relawan->latitude !== null ? (float)$relawan->latitude : null,
+                'longitude'     => $relawan->longitude !== null ? (float)$relawan->longitude : null,
             ];
         });
 
         return response()->json([
-            'message' => 'Berhasil mengambil daftar relawan terdekat',
+            'message' => ($hasCoordinates && !$isFallback)
+                ? 'Berhasil mengambil daftar relawan terdekat'
+                : 'Berhasil mengambil daftar relawan',
             'total'   => $data->count(),
             'data'    => $data,
         ], 200);
@@ -508,6 +542,7 @@ class DashboardAdminController extends Controller
             'total'        => $activities->count(),
             'activity_log' => $activities,
             'activities'   => $activities,
+            'data'         => $activities,
         ], 200);
     }
 
