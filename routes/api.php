@@ -148,6 +148,7 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         // Peta Kasus Aktif & Ringkasan Sebaran Urgensi Kasus
         Route::get('/admin/dashboard/peta-kasus', [PetaKasusAdminController::class, 'index']);
         Route::get('/admin/dashboard/sebaran-urgensi', [SebaranUrgensiAdminController::class, 'index']);
+        Route::get('/admin/dashboard/grafik-sos', [SebaranUrgensiAdminController::class, 'grafikSos']);
         
         // Kelola Master Data Kategori Laporan & Pesan Cepat (Hanya Admin & Superadmin)
         Route::get('/admin/kategori-laporan', [LaporanOptionManagementController::class, 'indexKategori']);
