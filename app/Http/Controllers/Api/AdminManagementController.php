@@ -16,10 +16,17 @@ class AdminManagementController extends Controller
      */
     public function index(Request $request)
     {
-        $admins = User::where('role', 'admin')
-            ->with(['grantedBy:id,name'])
+        $admins = User::whereIn('role', ['admin', 'superadmin'])
+            ->with(['grantedBy:id,name', 'accounts'])
+            ->orderByRaw("CASE WHEN role = 'superadmin' THEN 0 ELSE 1 END")
             ->latest()
-            ->get();
+            ->get()
+            ->map(function ($admin) {
+                $email = $admin->accounts->firstWhere('provider', 'local')?->email
+                    ?? $admin->accounts->first()?->email;
+                $admin->email = $email;
+                return $admin;
+            });
 
         return response()->json([
             'message' => 'Berhasil mengambil daftar Admin',
@@ -34,7 +41,27 @@ class AdminManagementController extends Controller
                 [
                     'key'         => 'kelola_laporan',
                     'label'       => 'Kelola Laporan Darurat',
-                    'description' => 'Izin memantau seluruh laporan dan mengubah status laporan.'
+                    'description' => 'Izin memantau seluruh laporan dan mengubah status penanganan laporan.'
+                ],
+                [
+                    'key'         => 'pantau_peta',
+                    'label'       => 'Pantau Peta Kasus',
+                    'description' => 'Izin mengakses peta pemantauan sebaran kasus SOS dan relawan.'
+                ],
+                [
+                    'key'         => 'kelola_relawan',
+                    'label'       => 'Kelola Relawan',
+                    'description' => 'Izin melihat daftar dan mengelola status keaktifan relawan.'
+                ],
+                [
+                    'key'         => 'broadcast_sirene',
+                    'label'       => 'Broadcast Sirene Posko',
+                    'description' => 'Izin membunyikan sirene alarm darurat di seluruh posko siaga.'
+                ],
+                [
+                    'key'         => 'kelola_admin',
+                    'label'       => 'Kelola Administrator',
+                    'description' => 'Izin membuat akun admin baru dan mengatur hak akses admin.'
                 ],
             ]
         ]);
@@ -109,7 +136,7 @@ class AdminManagementController extends Controller
     {
         $request->validate([
             'permissions'   => 'required|array',
-            'permissions.*' => 'string|in:verifikasi_relawan,kelola_laporan',
+            'permissions.*' => 'string|in:verifikasi_relawan,kelola_laporan,pantau_peta,kelola_relawan,broadcast_sirene,kelola_admin',
         ]);
 
         $admin = User::where('role', 'admin')->find($id);
