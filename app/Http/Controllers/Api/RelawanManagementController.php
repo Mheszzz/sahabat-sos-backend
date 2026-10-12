@@ -5,14 +5,93 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Models\Account;
+use Illuminate\Support\Facades\DB;
 
 class RelawanManagementController extends Controller
 {
-    public function index()
+    /**
+     * Mendaftarkan relawan baru oleh Admin (Pre-Registration via Google SSO)
+     * Tidak membutuhkan password karena relawan akan login via Google di mobile
+     */
+    public function store(Request $request)
     {
-        $relawan = User::where('role', 'relawan')
-                ->select('id', 'name', 'alamat', 'no_telp', 'foto_profile', 'is_active')
-                ->paginate(10);
+        $validated = $request->validate([
+            'name'      => 'required|string|max:255',
+            'email'     => 'required|email|max:255',
+            'no_telp'   => 'required|string|max:20',
+            'alamat'    => 'required|string|max:255',
+            'pekerjaan' => 'nullable|string|max:255',
+        ]);
+
+        $email = strtolower(trim($validated['email']));
+
+        // Cek apakah email sudah terdaftar di tabel accounts
+        if (Account::where('email', $email)->exists()) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Email ini sudah terdaftar di sistem. Silakan gunakan email lain.'
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $user = User::create([
+                'name'                => $validated['name'],
+                'role'                => 'relawan',
+                'no_telp'             => $validated['no_telp'],
+                'alamat'              => $validated['alamat'],
+                'pekerjaan'           => $validated['pekerjaan'] ?? null,
+                'status_verifikasi'   => 'terverifikasi',
+                'is_active'           => true,
+                'persetujuan_privasi' => true,
+                'waktu_persetujuan'   => now(),
+            ]);
+
+            Account::create([
+                'user_id'     => $user->id,
+                'provider'    => 'google',
+                'provider_id' => null, // Akan diisi otomatis saat relawan pertama kali login via Google di mobile
+                'email'       => $email,
+                'password'    => null, // Login murni via Google SSO
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Relawan berhasil didaftarkan. Relawan dapat langsung login di aplikasi mobile menggunakan Masuk dengan Akun Google.',
+                'data'    => [
+                    'id'                => $user->id,
+                    'name'              => $user->name,
+                    'email'             => $email,
+                    'role'              => $user->role,
+                    'status_verifikasi' => $user->status_verifikasi,
+                ]
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal mendaftarkan relawan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    public function index(Request $request)
+    {
+        $perPage = (int) $request->query('per_page', 50);
+        $relawan = User::with('accounts')
+                ->where('role', 'relawan')
+                ->select('id', 'name', 'alamat', 'no_telp', 'foto_profile', 'is_active', 'status_verifikasi', 'pekerjaan', 'alasan_relawan', 'created_at')
+                ->latest()
+                ->paginate($perPage);
+
+        $relawan->getCollection()->transform(function ($item) {
+            $item->email = $item->accounts->first()?->email ?? '-';
+            return $item;
+        });
+
         return response()->json([
             'status' => 'success',
             'data' => $relawan
@@ -32,10 +111,7 @@ class RelawanManagementController extends Controller
             'is_active' => $request->is_active
         ]);
 
-        // Jika status diubah menjadi FALSE (nonaktif), langsung cabut token loginnya
-        if (!$request->is_active) {
-            $relawan->tokens()->delete();
-        }
+        // Token tidak dicabut agar relawan tetap dapat membuka halaman profil untuk melihat keterangan akun dinonaktifkan
 
         $statusPesan = $request->is_active ? 'diaktifkan' : 'dinonaktifkan';
 

@@ -81,7 +81,7 @@ class AuthController extends Controller
         try {
             DB::beginTransaction();
 
-            // 1. Cek apakah akun Google ini sudah ada di tabel accounts
+            // 1. Cek apakah akun Google ini sudah ada di tabel accounts (berdasarkan Google ID)
             $account = Account::where('provider', 'google')
                 ->where('provider_id', $googleId)
                 ->first();
@@ -96,7 +96,7 @@ class AuthController extends Controller
                     ], 403);
                 }
             } else {
-                // 2. Jika belum ada di accounts untuk provider google, cek apakah email sudah ada di tabel accounts
+                // 2. Jika belum ada di accounts untuk Google ID ini, cek apakah email sudah ada di tabel accounts (misal didaftarkan oleh Admin)
                 $existingAccount = Account::where('email', $googleEmail)->first();
 
                 if ($existingAccount) {
@@ -107,23 +107,48 @@ class AuthController extends Controller
                             'message' => 'Akses ditolak. Email ini terdaftar sebagai Admin/Superadmin.'
                         ], 403);
                     }
+
+                    // Tautkan Google ID ke akun yang sudah ada
+                    if ($existingAccount->provider === 'google') {
+                        $existingAccount->update(['provider_id' => $googleId]);
+                    } else {
+                        Account::updateOrCreate(
+                            ['provider' => 'google', 'email' => $googleEmail],
+                            ['user_id' => $user->id, 'provider_id' => $googleId, 'password' => null]
+                        );
+                    }
                 } else {
-                    // 3. Buat User baru jika belum terdaftar
+                    // 3. Buat User baru jika belum terdaftar sama sekali
                     $user = User::create([
-                        'name'         => $googleName ?? 'User Google',
-                        'foto_profile' => $googleAvatar,
-                        'role'         => $requestedRole,
+                        'name'              => $googleName ?? 'User Google',
+                        'foto_profile'      => $googleAvatar,
+                        'role'              => $requestedRole,
+                        'status_verifikasi' => $requestedRole === 'relawan' ? 'pending' : 'terverifikasi',
+                        'is_active'         => true,
+                    ]);
+
+                    // 4. Tautkan Akun Google ke tabel accounts
+                    Account::create([
+                        'user_id'     => $user->id,
+                        'provider'    => 'google',
+                        'provider_id' => $googleId,
+                        'email'       => $googleEmail,
+                        'password'    => null,
                     ]);
                 }
+            }
 
-                // 4. Tautkan Akun Google ke tabel accounts
-                Account::create([
-                    'user_id'     => $user->id,
-                    'provider'    => 'google',
-                    'provider_id' => $googleId,
-                    'email'       => $googleEmail,
-                    'password'    => null,
-                ]);
+            // Update foto profil jika belum ada
+            if (empty($user->foto_profile) && !empty($googleAvatar)) {
+                $user->update(['foto_profile' => $googleAvatar]);
+            }
+
+            // Cek apakah akun dinonaktifkan (relawan tetap diizinkan login agar dapat membuka profil dan melihat keterangan dinonaktifkan)
+            $isActive = $user->is_active ?? true;
+            if (!$isActive && $user->role !== 'relawan') {
+                return response()->json([
+                    'message' => 'Akun Anda telah dinonaktifkan oleh administrator.'
+                ], 403);
             }
 
             DB::commit();
@@ -134,11 +159,16 @@ class AuthController extends Controller
             // Generate Token Sanctum
             $token = $user->createToken('auth_token')->plainTextToken;
 
+            // Lampirkan email untuk response frontend
+            $user->email = $googleEmail;
+
             return response()->json([
                 'message'             => $isProfileComplete ? 'Login Google berhasil' : 'Login Google berhasil, silakan lengkapi profil Anda.',
                 'access_token'        => $token,
                 'token_type'          => 'Bearer',
                 'is_profile_complete' => $isProfileComplete,
+                'status_verifikasi'   => $user->status_verifikasi,
+                'is_active'           => (bool) $user->is_active,
                 'user'                => $user,
             ]);
 
@@ -181,11 +211,17 @@ class AuthController extends Controller
             'lokasi_user'         => 'nullable|string',
         ]);
 
+        $targetRole = $validated['role'] ?? $user->role;
+        if ($targetRole === 'relawan' && ($user->role !== 'relawan' || $user->status_verifikasi !== 'terverifikasi')) {
+            $validated['status_verifikasi'] = 'pending';
+        }
+
         $user->update($validated);
 
         return response()->json([
             'message'             => 'Profil berhasil diperbarui.',
             'is_profile_complete' => $user->isProfileComplete(),
+            'status_verifikasi'   => $user->status_verifikasi,
             'user'                => $user->refresh(),
         ]);
     }
@@ -477,13 +513,21 @@ class AuthController extends Controller
             ], 403);
         }
 
+        if (!$user->is_active) {
+            return response()->json([
+                'message' => 'Akun Anda telah dinonaktifkan oleh administrator.'
+            ], 403);
+        }
+
         $token = $user->createToken('auth_token')->plainTextToken;
+        $user->email = $email;
 
         return response()->json([
             'message'             => 'Login berhasil',
             'access_token'        => $token,
             'token_type'          => 'Bearer',
             'is_profile_complete' => $user->isProfileComplete(),
+            'status_verifikasi'   => $user->status_verifikasi,
             'user'                => $user,
         ]);
     }
@@ -573,6 +617,11 @@ class AuthController extends Controller
             ->latest()
             ->get();
 
+        $relawans->transform(function ($relawan) {
+            $relawan->email = $relawan->accounts->first()?->email ?? '-';
+            return $relawan;
+        });
+
         return response()->json([
             'message' => 'Berhasil mengambil daftar relawan pending verifikasi',
             'total'   => $relawans->count(),
@@ -589,14 +638,23 @@ class AuthController extends Controller
             'status_verifikasi' => 'required|in:terverifikasi,ditolak',
         ]);
 
-        $relawan = User::where('role', 'relawan')->find($id);
+        $relawan = User::with('accounts')->where('role', 'relawan')->find($id);
         if (!$relawan) {
             return response()->json(['message' => 'Akun relawan tidak ditemukan'], 404);
         }
 
-        $relawan->update([
+        $updateData = [
             'status_verifikasi' => $request->status_verifikasi,
-        ]);
+        ];
+
+        if ($request->status_verifikasi === 'terverifikasi') {
+            $updateData['is_active'] = true;
+        } elseif ($request->status_verifikasi === 'ditolak') {
+            $updateData['is_active'] = false;
+        }
+
+        $relawan->update($updateData);
+        $relawan->email = $relawan->accounts->first()?->email ?? '-';
 
         return response()->json([
             'message' => "Status verifikasi relawan {$relawan->name} berhasil diubah menjadi {$request->status_verifikasi}",

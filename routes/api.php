@@ -50,8 +50,6 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
     Route::get('/laporan/{id}', [LaporanController::class, 'show']);
     Route::put('/laporan/{id}/status', [LaporanController::class, 'updateStatus']);
 
-    Route::post('/relawan/location', [RelawanLocationController::class, 'updateLocation']);
-
     // Route Khusus Pengguna & Relawan (Beranda & CRUD Profile)
     Route::middleware('role:pengguna,relawan')->group(function () {
         
@@ -88,26 +86,41 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
 
     // Route Khusus Relawan
     Route::middleware('role:relawan')->group(function () {
+        // Profil Relawan (Selalu bisa diakses meskipun status verifikasi masih pending)
         Route::get('/relawan/profile', function (Request $request) {
-            return response()->json(['user' => $request->user(), 'is_profile_complete' => $request->user()->isProfileComplete()]);
+            $user = $request->user()->loadMissing('accounts');
+            $email = $user->accounts->first()?->email;
+            return response()->json([
+                'user'                => array_merge($user->toArray(), ['email' => $email]),
+                'is_profile_complete' => $user->isProfileComplete(),
+                'status_verifikasi'   => $user->status_verifikasi,
+                'is_active'           => (bool) $user->is_active,
+            ]);
         });
-        // Beranda & Riwayat Endpoint
-        Route::get('/relawan/beranda', [BerandaRelawanController::class, 'index']); // riwayat penanganan beranda
-        Route::get('/relawan/tugas', [BerandaRelawanController::class, 'tugasRelawan']); // tugas yang diterima (SOS & Laporan)
-        Route::get('/relawan/riwayat', [BerandaRelawanController::class, 'riwayatRelawan']); // riwayat penanganan tugas
-        
-        // Update Status Ketersediaan
-        Route::put('/relawan/status-ketersediaan', [BerandaRelawanController::class, 'updateStatusKetersediaan']);
 
-        // SOS Endpoints
-        Route::get('/sos/active/relawan', [SOSController::class, 'getActiveRelawanSOS']); // SOS tampil untuk semua relawan
-        Route::get('/sos/relawan/tasks', [SOSController::class, 'activeTask']); // menampilkan SOS yang sedang ditangani 
-        Route::patch('/sos/{id}/status', [SOSController::class, 'updateStatus']); // mengubah status SOS (proses/selesai)
-        Route::post('/sos/{id}/reject', [SOSController::class, 'rejectSOS']); // menolak SOS yang ditawarkan
+        // Seluruh Fitur Operasional Relawan (Wajib berstatus 'terverifikasi')
+        Route::middleware('verified_relawan')->group(function () {
+            // Update Lokasi GPS Relawan
+            Route::post('/relawan/location', [RelawanLocationController::class, 'updateLocation']);
 
-        // Chat WhatsApp Pengguna (Korban/Pelapor) oleh Relawan
-        Route::match(['get', 'post'], '/relawan/chat-wa/{tipe}/{id}', [HubungiWhatsAppController::class, 'hubungiPengguna']);
-        Route::match(['get', 'post'], '/relawan/tugas/{tipe}/{id}/chat-wa', [HubungiWhatsAppController::class, 'hubungiPengguna']);
+            // Beranda & Riwayat Endpoint
+            Route::get('/relawan/beranda', [BerandaRelawanController::class, 'index']); // riwayat penanganan beranda
+            Route::get('/relawan/tugas', [BerandaRelawanController::class, 'tugasRelawan']); // tugas yang diterima (SOS & Laporan)
+            Route::get('/relawan/riwayat', [BerandaRelawanController::class, 'riwayatRelawan']); // riwayat penanganan tugas
+            
+            // Update Status Ketersediaan
+            Route::put('/relawan/status-ketersediaan', [BerandaRelawanController::class, 'updateStatusKetersediaan']);
+
+            // SOS Endpoints
+            Route::get('/sos/active/relawan', [SOSController::class, 'getActiveRelawanSOS']); // SOS tampil untuk semua relawan
+            Route::get('/sos/relawan/tasks', [SOSController::class, 'activeTask']); // menampilkan SOS yang sedang ditangani 
+            Route::patch('/sos/{id}/status', [SOSController::class, 'updateStatus']); // mengubah status SOS (proses/selesai)
+            Route::post('/sos/{id}/reject', [SOSController::class, 'rejectSOS']); // menolak SOS yang ditawarkan
+
+            // Chat WhatsApp Pengguna (Korban/Pelapor) oleh Relawan
+            Route::match(['get', 'post'], '/relawan/chat-wa/{tipe}/{id}', [HubungiWhatsAppController::class, 'hubungiPengguna']);
+            Route::match(['get', 'post'], '/relawan/tugas/{tipe}/{id}/chat-wa', [HubungiWhatsAppController::class, 'hubungiPengguna']);
+        });
     });
 
     // Route Khusus Admin & Superadmin (Beranda Admin, Command Center, Verifikasi Relawan, & Kelola Opsi Laporan)
@@ -165,6 +178,9 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::middleware('permission:verifikasi_relawan')->group(function () {
             Route::get('/admin/relawan/pending', [AuthController::class, 'getPendingRelawan']);
             Route::put('/admin/relawan/{id}/verifikasi', [AuthController::class, 'verifikasiRelawan']);
+            Route::post('/admin/relawan', [RelawanManagementController::class, 'store']);
+            Route::get('/admin/relawan', [RelawanManagementController::class, 'index']);
+            Route::put('/admin/relawan/{id}/updateStatus', [RelawanManagementController::class, 'updateStatus']);
         });
     });
 
@@ -177,6 +193,7 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
 
         //Endpoint kelola relawan
         Route::get('/relawan', [RelawanManagementController::class, 'index']);
+        Route::post('/relawan', [RelawanManagementController::class, 'store']);
         Route::put('/relawan/{id}/updateStatus', [RelawanManagementController::class, 'updateStatus']);
     });
 
