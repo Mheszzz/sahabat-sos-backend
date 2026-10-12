@@ -56,7 +56,13 @@ class HubungiWhatsAppController extends Controller
             $waktuStr = \Carbon\Carbon::now('Asia/Jakarta')->format('d/m/Y H:i') . ' WIB';
         }
 
-        $lokasi = $isSos ? 'Lokasi Panggilan Darurat SOS Korban' : ($kasus->lokasi_laporan ?? 'Lokasi Kejadian');
+        if ($isSos) {
+            $lokasi = !empty($pengguna->lokasi_user)
+                ? $pengguna->lokasi_user
+                : (($kasus->latitude && $kasus->longitude) ? "Koordinat GPS ({$kasus->latitude}, {$kasus->longitude})" : 'Lokasi Terkini Pengguna');
+        } else {
+            $lokasi = $kasus->lokasi_laporan ?? 'Lokasi Kejadian';
+        }
         $lat = $kasus->latitude;
         $lng = $kasus->longitude;
         $gmapsUrl = ($lat && $lng) ? "https://www.google.com/maps?q={$lat},{$lng}" : null;

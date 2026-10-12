@@ -64,7 +64,7 @@ class BerandaRelawanController extends Controller
                     'sub_judul'     => 'Darurat',
                     'id_pengguna'   => $item->id_pengguna,
                     'pengguna'      => $item->pengguna,
-                    'lokasi'        => 'Lokasi Panggilan Darurat SOS',
+                    'lokasi'        => (!empty($item->pengguna?->lokasi_user) ? $item->pengguna->lokasi_user : ($item->pengguna?->alamat ?? 'Lokasi GPS Korban')),
                     'latitude'      => (float) $item->latitude,
                     'longitude'     => (float) $item->longitude,
                     'deskripsi'     => 'Permintaan bantuan darurat SOS',

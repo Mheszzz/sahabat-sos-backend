@@ -95,13 +95,16 @@ class KasusAktifController extends Controller
         if ($item->pengguna) {
             $userWa = HubungiWhatsAppController::formatWhatsAppNumber($item->pengguna->no_telp);
             $pelaporData = [
-                'id'            => $item->pengguna->id,
-                'name'          => $item->pengguna->name,
-                'no_telp'       => $item->pengguna->no_telp,
-                'no_telp_wa'    => $userWa,
-                'whatsapp_url'  => $userWa ? "https://wa.me/{$userWa}" : null,
-                'foto_profile'  => $item->pengguna->foto_profile_url ?? ($item->pengguna->foto_profile ? url('storage/' . $item->pengguna->foto_profile) : null),
-                'kategori_user' => $item->pengguna->kategori_user ?? 'umum',
+                'id'                => $item->pengguna->id,
+                'name'              => $item->pengguna->name,
+                'email'             => $item->pengguna->email ?? null,
+                'no_telp'           => $item->pengguna->no_telp,
+                'no_telp_wa'        => $userWa,
+                'whatsapp_url'      => $userWa ? "https://wa.me/{$userWa}" : null,
+                'foto_profile'      => $item->pengguna->foto_profile_url ?? ($item->pengguna->foto_profile ? url('storage/' . $item->pengguna->foto_profile) : null),
+                'kategori_user'     => $item->pengguna->kategori_user ?? 'umum',
+                'metode_komunikasi' => $item->pengguna->metode_komunikasi ?? null,
+                'keterangan_medis'  => $item->pengguna->catatan_medis ?? $item->pengguna->keterangan_medis ?? null,
             ];
             if ($isDetail && $item->pengguna->relationLoaded('kontakDarurat')) {
                 $kontakList = $item->pengguna->kontakDarurat;
@@ -141,8 +144,18 @@ class KasusAktifController extends Controller
             ];
         }
 
+        $alamatDisplay = null;
+        if ($isSos) {
+            // Untuk panggilan Darurat SOS, lokasi mutlak mengacu pada posisi realtime pengguna saat kejadian (lokasi_user)
+            $alamatDisplay = !empty($item->pengguna?->lokasi_user)
+                ? $item->pengguna->lokasi_user
+                : ($item->latitude && $item->longitude ? "Koordinat GPS ({$item->latitude}, {$item->longitude})" : 'Lokasi Terkini Pengguna');
+        } else {
+            $alamatDisplay = $item->lokasi_laporan ?? 'Lokasi Kejadian';
+        }
+
         $lokasiData = [
-            'alamat'    => $isSos ? 'Lokasi Panggilan Darurat SOS' : ($item->lokasi_laporan ?? 'Lokasi Kejadian'),
+            'alamat'    => $alamatDisplay,
             'latitude'  => (float) $item->latitude,
             'longitude' => (float) $item->longitude,
         ];
