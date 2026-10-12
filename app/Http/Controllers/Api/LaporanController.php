@@ -250,7 +250,7 @@ class LaporanController extends Controller
      */
     public function show($id, Request $request)
     {
-        $laporan = Laporan::with(['pengguna', 'relawan'])->find($id);
+        $laporan = Laporan::with(['pengguna.kontakDarurat', 'relawan', 'catatanPenanganan.admin'])->find($id);
 
         if (!$laporan) {
             return response()->json(['message' => 'Laporan tidak ditemukan'], 404);
