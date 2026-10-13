@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\RelawanLocationController;
 use App\Http\Controllers\Api\KasusAktifController;
 use App\Http\Controllers\Api\HubungiWhatsAppController;
 use App\Http\Controllers\Api\BerandaRelawanController;
+use App\Http\Controllers\Api\AdminProfileController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -112,6 +113,13 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
 
     // Route Khusus Admin & Superadmin (Beranda Admin, Command Center, Verifikasi Relawan, & Kelola Opsi Laporan)
     Route::middleware('role:admin,superadmin')->group(function () {
+        // Kelola Profil Admin (Lihat Profil, Edit Data Diri & Foto, Ubah Email, Ubah Password, Hapus Foto)
+        Route::get('/admin/profile', [AdminProfileController::class, 'show']);
+        Route::put('/admin/profile', [AdminProfileController::class, 'update']);
+        Route::post('/admin/profile', [AdminProfileController::class, 'update']); // Untuk Multipart Form-Data (Upload Foto)
+        Route::put('/admin/profile/security', [AdminProfileController::class, 'updateSecurity']);
+        Route::delete('/admin/profile/foto', [AdminProfileController::class, 'destroyFoto']);
+
         // Beranda & Stats selalu bisa diakses Admin (meskipun permissions lain kosong)
         Route::get('/admin/beranda', [DashboardAdminController::class, 'index']);
         Route::get('/admin/dashboard-stats', [DashboardAdminController::class, 'index']);
