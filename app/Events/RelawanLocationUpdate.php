@@ -23,13 +23,31 @@ class RelawanLocationUpdate implements ShouldBroadcastNow
     public $longitude;
     public $heading;
     public $distance;
-    public function __construct($sosId, float $latitude, float $longitude, ?float $heading, float $distance)
-    {
+    public $relawanId;
+    public $nama;
+    public $status;
+    public $lokasiUser;
+
+    public function __construct(
+        $sosId,
+        float $latitude,
+        float $longitude,
+        ?float $heading = null,
+        float $distance = 0.0,
+        $relawanId = null,
+        $nama = null,
+        $status = 'siaga_bebas',
+        $lokasiUser = null
+    ) {
         $this->sosId = $sosId;
         $this->latitude = $latitude;
         $this->longitude = $longitude;
         $this->heading = $heading;
         $this->distance = $distance;
+        $this->relawanId = $relawanId;
+        $this->nama = $nama;
+        $this->status = $status;
+        $this->lokasiUser = $lokasiUser;
     }
 
     /**
@@ -39,13 +57,36 @@ class RelawanLocationUpdate implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        return [
-            new PrivateChannel('sos.' . $this->sosId),
+        $channels = [
+            new Channel('command-center'),
+            new Channel('relawan-locations'),
         ];
+
+        if ($this->sosId) {
+            $channels[] = new PrivateChannel('sos.' . $this->sosId);
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string
     {
         return 'RelawanLocationUpdate';
+    }
+
+    public function broadcastWith(): array
+    {
+        return [
+            'sos_id'       => $this->sosId,
+            'relawan_id'   => $this->relawanId,
+            'nama'         => $this->nama,
+            'latitude'     => $this->latitude,
+            'longitude'    => $this->longitude,
+            'heading'      => $this->heading,
+            'distance'     => $this->distance,
+            'status'       => $this->status,
+            'lokasi_user'  => $this->lokasiUser,
+            'updated_at'   => now()->toIso8601String(),
+        ];
     }
 }

@@ -7,11 +7,11 @@ use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class LaporanCreated implements ShouldBroadcast
+class LaporanCreated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
@@ -35,6 +35,7 @@ class LaporanCreated implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
+            new Channel('command-center'),
             new Channel('laporan-channel'),
             new PrivateChannel('relawan-channel'),
         ];
