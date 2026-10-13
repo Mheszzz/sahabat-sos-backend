@@ -67,6 +67,7 @@ class PetaKasusAdminController extends Controller
 
         // 3. Posisi Relawan Lapangan (Siaga & Sedang Bertugas)
         $posisiRelawan = User::where('role', 'relawan')
+            ->where('is_active', true)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->get()
@@ -80,7 +81,7 @@ class PetaKasusAdminController extends Controller
                     ->where('id_relawan', $relawan->id)
                     ->first();
                 $isBusy = $activeSOS !== null;
-                $isOff = $relawan->status_ketersediaan && $relawan->status_ketersediaan !== 'tersedia';
+                $isOff = $relawan->status_ketersediaan && !in_array($relawan->status_ketersediaan, ['tersedia', 'siaga']);
 
                 $statusLabel = 'siaga_bebas';
                 if ($isBusy) {
