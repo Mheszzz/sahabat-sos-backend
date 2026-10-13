@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SOS;
 use App\Models\Laporan;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Request;
 
 class PetaKasusAdminController extends Controller
@@ -65,6 +66,11 @@ class PetaKasusAdminController extends Controller
             ->whereNotNull('longitude')
             ->get()
             ->map(function ($relawan) {
+                // Ambil koordinat GPS real-time dari cache redis jika baru di-broadcast oleh mobile app relawan
+                $cachedLoc = Cache::get("relawan:{$relawan->id}:location");
+                $lat = $cachedLoc['latitude'] ?? (float) $relawan->latitude;
+                $lng = $cachedLoc['longitude'] ?? (float) $relawan->longitude;
+
                 $activeSOS = SOS::with('pengguna')->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                     ->where('id_relawan', $relawan->id)
                     ->first();
@@ -90,8 +96,8 @@ class PetaKasusAdminController extends Controller
                     'id'           => $relawan->id,
                     'nama'         => $relawan->name,
                     'no_telp'      => $relawan->no_telp,
-                    'latitude'     => (float) $relawan->latitude,
-                    'longitude'    => (float) $relawan->longitude,
+                    'latitude'     => (float) $lat,
+                    'longitude'    => (float) $lng,
                     'status'       => $statusLabel,
                     'kompetensi'   => $this->determineVolunteerCompetency($relawan),
                     'lokasi_user'  => $relawan->lokasi_user ?? 'Area Siaga',

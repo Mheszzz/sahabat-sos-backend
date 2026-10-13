@@ -190,6 +190,8 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
             Route::post('/admin/relawan', [RelawanManagementController::class, 'store']);
             Route::get('/admin/relawan', [RelawanManagementController::class, 'index']);
             Route::put('/admin/relawan/{id}/updateStatus', [RelawanManagementController::class, 'updateStatus']);
+            Route::get('/admin/relawan/locations', [RelawanLocationController::class, 'getActiveLocations']);
+            Route::get('/admin/relawan/{id}', [RelawanLocationController::class, 'show']);
         });
     });
 
@@ -202,6 +204,7 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
 
         //Endpoint kelola relawan
         Route::get('/relawan', [RelawanManagementController::class, 'index']);
+        Route::get('/relawan/{id}', [RelawanLocationController::class, 'show']);
         Route::post('/relawan', [RelawanManagementController::class, 'store']);
         Route::put('/relawan/{id}/updateStatus', [RelawanManagementController::class, 'updateStatus']);
     });
