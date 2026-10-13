@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Account;
+use App\Events\RelawanStatusUpdated;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class RelawanManagementController extends Controller
@@ -106,14 +108,26 @@ class RelawanManagementController extends Controller
         ]);
 
         $relawan = User::where('role', 'relawan')->findOrFail($id);
+        $isActive = filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN);
 
         $relawan->update([
-            'is_active' => $request->is_active
+            'is_active'           => $isActive,
+            'status_ketersediaan' => $isActive ? 'tersedia' : 'nonaktif',
         ]);
 
-        // Token tidak dicabut agar relawan tetap dapat membuka halaman profil untuk melihat keterangan akun dinonaktifkan
+        // Bersihkan cache lokasi realtime jika dinonaktifkan
+        if (!$isActive) {
+            Cache::forget("relawan:{$relawan->id}:location");
+        }
 
-        $statusPesan = $request->is_active ? 'diaktifkan' : 'dinonaktifkan';
+        // Broadcast event real-time ke Reverb agar dashboard & peta terupdate otomatis
+        try {
+            broadcast(new RelawanStatusUpdated($relawan));
+        } catch (\Throwable $e) {
+            // Abaikan jika koneksi websocket/broadcast sedang bermasalah
+        }
+
+        $statusPesan = $isActive ? 'diaktifkan' : 'dinonaktifkan';
 
         return response()->json([
             'status' => 'success',

@@ -38,7 +38,7 @@ class DashboardAdminController extends Controller
         $daruratSosAktifCount = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])->count();
 
         // Relawan stats
-        $totalRelawan = User::where('role', 'relawan')->count();
+        $totalRelawan = User::where('role', 'relawan')->where('is_active', true)->count();
         $relawanSedangBertugasCount = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
             ->whereNotNull('id_relawan')
             ->pluck('id_relawan')
@@ -46,8 +46,9 @@ class DashboardAdminController extends Controller
             ->count();
             
         $relawanOffCount = User::where('role', 'relawan')
+            ->where('is_active', true)
             ->whereNotNull('status_ketersediaan')
-            ->where('status_ketersediaan', '!=', 'tersedia')
+            ->whereNotIn('status_ketersediaan', ['tersedia', 'siaga'])
             ->count();
             
         $relawanSiagaCount = max(0, $totalRelawan - $relawanSedangBertugasCount - $relawanOffCount);
@@ -164,6 +165,7 @@ class DashboardAdminController extends Controller
         });
 
         $posisiRelawan = User::where('role', 'relawan')
+            ->where('is_active', true)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->get()
@@ -172,7 +174,7 @@ class DashboardAdminController extends Controller
                     ->where('id_relawan', $relawan->id)
                     ->first();
                 $isBusy = $activeSOS !== null;
-                $isOff = $relawan->status_ketersediaan && $relawan->status_ketersediaan !== 'tersedia';
+                $isOff = $relawan->status_ketersediaan && !in_array($relawan->status_ketersediaan, ['tersedia', 'siaga']);
 
                 $statusLabel = 'siaga_bebas';
                 if ($isBusy) {
@@ -337,6 +339,7 @@ class DashboardAdminController extends Controller
 
         if ($hasCoordinates) {
             $relawans = User::where('role', 'relawan')
+                ->where('is_active', true)
                 ->whereNotNull('latitude')
                 ->whereNotNull('longitude')
                 ->nearby((float)$lat, (float)$lng, 10.0)
@@ -348,6 +351,7 @@ class DashboardAdminController extends Controller
         if (!$hasCoordinates || $relawans->isEmpty()) {
             $isFallback = true;
             $relawans = User::where('role', 'relawan')
+                ->where('is_active', true)
                 ->orderByRaw("CASE WHEN status_ketersediaan = 'tersedia' THEN 1 ELSE 2 END")
                 ->latest()
                 ->get();
