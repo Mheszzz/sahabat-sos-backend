@@ -1,0 +1,21 @@
+  deploy-to-wsl:
+    needs: test
+    runs-on: self-hosted
+    steps:
+      - name: Update Backend & Restart Services
+        run: |
+          # 1. Pindah ke folder backend di home WSL dan pull commit terbaru
+          cd $HOME/SAHABAT-SOS/sahabat-sos-backend
+          git pull origin main
+
+          # 2. Pindah ke folder root Docker Compose
+          cd $HOME/SAHABAT-SOS
+
+          # 3. Rebuild service backend, reverb, dan queue
+          docker compose up -d --build backend reverb queue
+
+          # 4. Jalankan migrasi database
+          docker compose exec -T backend php artisan migrate --force
+          docker compose exec -T backend php artisan optimize:clear
+
+          echo "✅ Backend berhasil dideploy di WSL!"
