@@ -9,6 +9,7 @@ class SOS extends Model
     protected $table = 's_o_s';
 
     protected $fillable = [
+        'nomor_kasus',
         'id_pengguna',
         'id_relawan',
         'latitude',
@@ -31,7 +32,54 @@ class SOS extends Model
 
     protected $appends = [
         'device_info',
+        'id_kasus',
     ];
+
+    /**
+     * Auto-generate nomor_kasus (contoh: SOS-1, SOS-2) saat pembuatan record baru
+     */
+    protected static function booted()
+    {
+        static::creating(function ($sos) {
+            if (empty($sos->nomor_kasus)) {
+                $sos->nomor_kasus = static::generateNomorKasus();
+            }
+        });
+    }
+
+    /**
+     * Generator nomor kasus transaksi SOS berikutnya
+     */
+    public static function generateNomorKasus(): string
+    {
+        try {
+            $lastRecord = static::whereNotNull('nomor_kasus')
+                ->orderByRaw("CAST(SUBSTRING(nomor_kasus FROM '[0-9]+') AS INTEGER) DESC NULLS LAST")
+                ->first();
+
+            if ($lastRecord && preg_match('/SOS-(\d+)/', $lastRecord->nomor_kasus, $matches)) {
+                $nextNum = ((int) $matches[1]) + 1;
+            } else {
+                $nextNum = (static::max('id') ?? 0) + 1;
+            }
+        } catch (\Throwable $e) {
+            $nextNum = (static::max('id') ?? 0) + 1;
+        }
+
+        while (static::where('nomor_kasus', 'SOS-' . $nextNum)->exists()) {
+            $nextNum++;
+        }
+
+        return 'SOS-' . $nextNum;
+    }
+
+    /**
+     * Accessor untuk id_kasus agar selalu mengembalikan format SOS-X
+     */
+    public function getIdKasusAttribute(): string
+    {
+        return $this->nomor_kasus ?? ('SOS-' . $this->id);
+    }
 
     /**
      * Accessor untuk device_info agar selalu mengembalikan status perangkat (baterai, sinyal, dll.)

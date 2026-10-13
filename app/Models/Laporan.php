@@ -9,6 +9,7 @@ class Laporan extends Model
     protected $table = 'laporans';
 
     protected $fillable = [
+        'nomor_kasus',
         'id_pengguna',
         'id_relawan',
         'lokasi_laporan',
@@ -27,6 +28,56 @@ class Laporan extends Model
         'longitude'     => 'float',
         'waktu_laporan' => 'datetime',
     ];
+
+    protected $appends = [
+        'id_kasus',
+    ];
+
+    /**
+     * Auto-generate nomor_kasus (contoh: LP-1, LP-2) saat pembuatan record baru
+     */
+    protected static function booted()
+    {
+        static::creating(function ($lap) {
+            if (empty($lap->nomor_kasus)) {
+                $lap->nomor_kasus = static::generateNomorKasus();
+            }
+        });
+    }
+
+    /**
+     * Generator nomor kasus transaksi Laporan berikutnya
+     */
+    public static function generateNomorKasus(): string
+    {
+        try {
+            $lastRecord = static::whereNotNull('nomor_kasus')
+                ->orderByRaw("CAST(SUBSTRING(nomor_kasus FROM '[0-9]+') AS INTEGER) DESC NULLS LAST")
+                ->first();
+
+            if ($lastRecord && preg_match('/LP-(\d+)/', $lastRecord->nomor_kasus, $matches)) {
+                $nextNum = ((int) $matches[1]) + 1;
+            } else {
+                $nextNum = (static::max('id') ?? 0) + 1;
+            }
+        } catch (\Throwable $e) {
+            $nextNum = (static::max('id') ?? 0) + 1;
+        }
+
+        while (static::where('nomor_kasus', 'LP-' . $nextNum)->exists()) {
+            $nextNum++;
+        }
+
+        return 'LP-' . $nextNum;
+    }
+
+    /**
+     * Accessor untuk id_kasus agar selalu mengembalikan format LP-X
+     */
+    public function getIdKasusAttribute(): string
+    {
+        return $this->nomor_kasus ?? ('LP-' . $this->id);
+    }
 
     /**
      * Scope query untuk mencari laporan terdekat berdasarkan koordinat pengguna/relawan.

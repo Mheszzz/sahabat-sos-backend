@@ -9,6 +9,7 @@ use App\Events\RelawanLocationUpdate;
 use App\Services\MapboxService;
 use App\HasGeoCalculations;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 
 class RelawanLocationController extends Controller
@@ -87,17 +88,21 @@ class RelawanLocationController extends Controller
 
         // B. Broadcast WebSocket Reverb (Admin Command Center & Mobile Korban jika ada sos)
         $statusLabel = $activeSos ? 'dalam_misi' : ($user->status_ketersediaan === 'tersedia' ? 'siaga_bebas' : 'off_istirahat');
-        broadcast(new RelawanLocationUpdate(
-            $activeSos ? $activeSos->id : null,
-            $lat,
-            $lng,
-            $heading,
-            $distanceInMeters,
-            $user->id,
-            $user->name,
-            $statusLabel,
-            $user->lokasi_user ?? 'Area Siaga'
-        ));
+        try {
+            broadcast(new RelawanLocationUpdate(
+                $activeSos ? $activeSos->id : null,
+                $lat,
+                $lng,
+                $heading,
+                $distanceInMeters,
+                $user->id,
+                $user->name,
+                $statusLabel,
+                $user->lokasi_user ?? 'Area Siaga'
+            ));
+        } catch (\Throwable $e) {
+            Log::warning("Gagal broadcast RelawanLocationUpdate: " . $e->getMessage());
+        }
 
         // 3. POSTGRESQL SYNC (Throttled 30 detik)
         $lastDbSync = Cache::get("relawan:{$user->id}:last_db_sync");

@@ -40,7 +40,11 @@ class EscalateSOSJob implements ShouldQueue
 
         // Jika targetRadius <= 0, ini adalah tahap akhir (broadcast umum ke seluruh relawan siaga)
         if ((float) $this->targetRadius <= 0.0) {
-            broadcast(new SOSCreated($sos, null, null));
+            try {
+                broadcast(new SOSCreated($sos, null, null));
+            } catch (\Throwable $e) {
+                Log::warning("Gagal broadcast eskalasi akhir SOSCreated: " . $e->getMessage());
+            }
             Log::info("Eskalasi tahap akhir SOS ID {$this->sosId}: Broadcast umum ke semua relawan siaga (relawan-channel).");
 
             SOSActivity::record(
@@ -72,7 +76,11 @@ class EscalateSOSJob implements ShouldQueue
 
         if ($volunteers->isNotEmpty()) {
             // Broadcast sinyal SOS ke seluruh relawan tersedia di radius target
-            broadcast(new SOSCreated($sos, $volunteerIds, $this->targetRadius));
+            try {
+                broadcast(new SOSCreated($sos, $volunteerIds, $this->targetRadius));
+            } catch (\Throwable $e) {
+                Log::warning("Gagal broadcast eskalasi SOSCreated: " . $e->getMessage());
+            }
 
             Log::info("Eskalasi SOS ID {$this->sosId} berhasil di-broadcast ke {$volunteers->count()} relawan tersedia (radius {$this->targetRadius} km)!");
         }

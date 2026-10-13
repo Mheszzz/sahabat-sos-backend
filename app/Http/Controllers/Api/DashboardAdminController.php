@@ -12,6 +12,7 @@ use App\Events\PoskoSireneTriggered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 class DashboardAdminController extends Controller
 {
@@ -109,7 +110,8 @@ class DashboardAdminController extends Controller
             });
 
             return [
-                'id_kasus'      => "#SOS-{$sos->id}",
+                'id_kasus'      => $sos->nomor_kasus ?? ("SOS-" . $sos->id),
+                'nomor_kasus'   => $sos->nomor_kasus ?? ("SOS-" . $sos->id),
                 'raw_id'        => $sos->id,
                 'tipe_kasus'    => 'SOS',
                 'asal_sinyal'   => 'Tombol Hardware SOS Aktif / Mobile App',
@@ -147,9 +149,11 @@ class DashboardAdminController extends Controller
         // C. Peta Pantauan GIS Data
         // -------------------------------------------------------------
         $titikDarurat = $activeSosList->map(function ($sos) {
+            $idKasus = $sos->nomor_kasus ?? ("SOS-" . $sos->id);
             return [
                 'id'          => $sos->id,
-                'id_kasus'    => "#SOS-{$sos->id}",
+                'id_kasus'    => $idKasus,
+                'nomor_kasus' => $idKasus,
                 'latitude'    => (float) $sos->latitude,
                 'longitude'   => (float) $sos->longitude,
                 'status'      => $sos->status_sos,
@@ -179,9 +183,11 @@ class DashboardAdminController extends Controller
 
                 $misiData = null;
                 if ($isBusy) {
+                    $idKasus = $activeSOS->nomor_kasus ?? ("SOS-" . $activeSOS->id);
                     $misiData = [
-                        'id_kasus' => "#SOS-{$activeSOS->id}",
-                        'tujuan'   => $activeSOS->pengguna->alamat ?? 'Lokasi GPS Korban',
+                        'id_kasus'    => $idKasus,
+                        'nomor_kasus' => $idKasus,
+                        'tujuan'      => $activeSOS->pengguna->alamat ?? 'Lokasi GPS Korban',
                     ];
                 }
 
@@ -471,7 +477,11 @@ class DashboardAdminController extends Controller
         );
 
         // Broadcast event pembaruan status SOS
-        broadcast(new SOSUpdateStatus($sos))->toOthers();
+        try {
+            broadcast(new SOSUpdateStatus($sos))->toOthers();
+        } catch (\Throwable $e) {
+            Log::warning("Gagal broadcast SOSUpdateStatus pada dispatchRelawan: " . $e->getMessage());
+        }
 
         return response()->json([
             'message' => "Berhasil menugaskan relawan {$relawan->name} ke SOS #{$sos->id}",
@@ -502,7 +512,11 @@ class DashboardAdminController extends Controller
             $admin->id
         );
 
-        broadcast(new SOSUpdateStatus($sos))->toOthers();
+        try {
+            broadcast(new SOSUpdateStatus($sos))->toOthers();
+        } catch (\Throwable $e) {
+            Log::warning("Gagal broadcast SOSUpdateStatus pada selesaiSOS: " . $e->getMessage());
+        }
 
         return response()->json([
             'message' => "Kasus SOS #{$sos->id} berhasil ditandai selesai.",
@@ -583,7 +597,11 @@ class DashboardAdminController extends Controller
         ];
 
         // Broadcast event ke Reverb WebSocket
-        broadcast(new PoskoSireneTriggered($payload))->toOthers();
+        try {
+            broadcast(new PoskoSireneTriggered($payload))->toOthers();
+        } catch (\Throwable $e) {
+            Log::warning("Gagal broadcast PoskoSireneTriggered: " . $e->getMessage());
+        }
 
         // Jika terhubung ke kasus SOS spesifik, catat ke log aktivitas SOS
         if ($sosId) {

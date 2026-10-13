@@ -63,16 +63,14 @@ class SOSCreated implements ShouldBroadcastNow
         $channels = [
             new Channel('command-center'),
             new PrivateChannel('sos.' . $this->sos->id),
+            new PrivateChannel('relawan-channel'),
         ];
 
         // Jika ditargetkan ke relawan tertentu (berdasarkan radius)
-        if ($this->targetRelawanIds !== null) {
+        if (!empty($this->targetRelawanIds)) {
             foreach ($this->targetRelawanIds as $relawanId) {
                 $channels[] = new PrivateChannel('relawan.' . $relawanId);
             }
-        } else {
-            // Jika tidak ada target spesifik (null), broadcast umum ke semua relawan
-            $channels[] = new PrivateChannel('relawan-channel');
         }
 
         return $channels;
@@ -95,6 +93,14 @@ class SOSCreated implements ShouldBroadcastNow
             'radius'      => $this->radius,
             'waktu_sos'   => $this->sos->waktu_sos,
             'updated_at'  => $this->sos->updated_at,
+            'pengguna'    => $this->sos->pengguna ? [
+                'id'                => $this->sos->pengguna->id,
+                'name'              => $this->sos->pengguna->name,
+                'no_telp'           => $this->sos->pengguna->no_telp,
+                'foto_profile'      => $this->sos->pengguna->foto_profile,
+                'kategori_user'     => $this->sos->pengguna->kategori_user,
+                'metode_komunikasi' => $this->sos->pengguna->metode_komunikasi,
+            ] : null,
         ];
     }
 }

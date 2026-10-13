@@ -31,6 +31,13 @@ class SOSController extends Controller
         $lat = (float) $request->latitude;
         $lng = (float) $request->longitude;
 
+        // Fallback jika mobile gagal lock GPS dan mengirim 0, 0: gunakan lokasi terakhir user di profil
+        if (($lat == 0.0 && $lng == 0.0) && $request->user()->latitude && $request->user()->longitude) {
+            $lat = (float) $request->user()->latitude;
+            $lng = (float) $request->user()->longitude;
+            Log::info("SOS latitude/longitude fallback to user profile: lat={$lat}, lng={$lng}");
+        }
+
         $userId = $request->user()->id;
 
         // Cek apakah pengguna sudah punya laporan SOS yang masih aktif
@@ -81,9 +88,18 @@ class SOSController extends Controller
         Log::info("SOS ID {$sos->id}: Memulai broadcast tahap 1 (radius 2 km). Ditemukan {$volunteers2km->count()} relawan tersedia.");
 
         if ($volunteers2km->isNotEmpty()) {
-            broadcast(new SOSCreated($sos, $volunteerIds, 2.0));
+            try {
+                broadcast(new SOSCreated($sos, $volunteerIds, 2.0));
+            } catch (\Throwable $e) {
+                Log::warning("Gagal broadcast SOSCreated pada store: " . $e->getMessage());
+            }
         } else {
-            Log::info("SOS ID {$sos->id}: Belum ada relawan tersedia dalam radius 2 km. Menunggu eskalasi berkala.");
+            Log::info("SOS ID {$sos->id}: Belum ada relawan tersedia dalam radius 2 km. Melakukan broadcast darurat ke seluruh relawan.");
+            try {
+                broadcast(new SOSCreated($sos, null, 2.0));
+            } catch (\Throwable $e) {
+                Log::warning("Gagal broadcast darurat SOSCreated pada store: " . $e->getMessage());
+            }
         }
 
         // 2. Tahap 2: Tunggu 30 detik, jika belum ada yang menerima, eskalasi bertingkat ke radius 3 km
@@ -127,7 +143,7 @@ class SOSController extends Controller
                 $query->where('id_relawan', $userId);
             })
             ->orderBy('created_at', 'desc')
-            ->first();
+            ->get();
 
         return response()->json(['data' => $sos]);
     }
@@ -250,7 +266,11 @@ class SOSController extends Controller
         $sos->load(['pengguna', 'relawan', 'activities.user']);
 
         // Broadcast update ke Reverb (WebSocket)
-        broadcast(new SOSUpdateStatus($sos));
+        try {
+            broadcast(new SOSUpdateStatus($sos));
+        } catch (\Throwable $e) {
+            Log::warning("Gagal broadcast SOSUpdateStatus pada updateStatus: " . $e->getMessage());
+        }
 
         $data = $sos->toArray();
         $data['activity_log'] = $sos->activities->map(function ($act) {
@@ -367,7 +387,11 @@ class SOSController extends Controller
 
         $sos->load(['pengguna', 'relawan']);
 
-        broadcast(new SOSUpdateStatus($sos));
+        try {
+            broadcast(new SOSUpdateStatus($sos));
+        } catch (\Throwable $e) {
+            Log::warning("Gagal broadcast SOSUpdateStatus pada cancelSOS: " . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Sinyal SOS berhasil dibatalkan.',

@@ -14,6 +14,7 @@ use App\Events\SOSUpdateStatus;
 use App\Http\Controllers\Api\HubungiWhatsAppController;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class KasusAktifController extends Controller
 {
@@ -141,6 +142,8 @@ class KasusAktifController extends Controller
                 'name'         => $item->relawan->name,
                 'no_telp'      => $item->relawan->no_telp,
                 'foto_profile' => $item->relawan->foto_profile_url ?? ($item->relawan->foto_profile ? url('storage/' . $item->relawan->foto_profile) : null),
+                'latitude'     => $item->relawan->latitude !== null ? (float)$item->relawan->latitude : null,
+                'longitude'    => $item->relawan->longitude !== null ? (float)$item->relawan->longitude : null,
             ];
         }
 
@@ -161,9 +164,12 @@ class KasusAktifController extends Controller
         ];
 
         $waktu = $isSos ? ($item->waktu_sos ?? $item->created_at) : ($item->waktu_laporan ?? $item->created_at);
+        $idKasus = $item->nomor_kasus ?? ($isSos ? "SOS-{$item->id}" : "LP-{$item->id}");
 
         $result = [
             'id'            => $item->id,
+            'nomor_kasus'   => $idKasus,
+            'id_kasus'      => $idKasus,
             'status'        => $readableStatus,
             'status_raw'    => $rawStatus,
             'kategori'      => $isSos ? 'SOS' : 'Laporan',
@@ -174,17 +180,19 @@ class KasusAktifController extends Controller
             'id_relawan'    => $item->id_relawan,
             'relawan'       => $relawanData,
             'lokasi'        => $lokasiData,
-            'deskripsi'     => $isSos ? 'Panggilan Darurat SOS Warga' : ($item->deskripsi ?? ''),
+            'deskripsi'     => $isSos ? 'Panggilan Darurat' : ($item->deskripsi ?? ''),
             'waktu'         => $waktu ? $waktu->toDateTimeString() : null,
         ];
 
+        if (!$isSos) {
+            $result['foto_laporan']     = $item->foto_laporan;
+            $result['foto_laporan_url'] = $item->foto_laporan ? url('storage/' . $item->foto_laporan) : null;
+            $result['rekam_suara']      = $item->rekam_suara;
+            $result['rekam_suara_url']  = $item->rekam_suara ? url('storage/' . $item->rekam_suara) : null;
+        }
+
         if ($isDetail) {
-            if (!$isSos) {
-                $result['foto_laporan']     = $item->foto_laporan;
-                $result['foto_laporan_url'] = $item->foto_laporan ? url('storage/' . $item->foto_laporan) : null;
-                $result['rekam_suara']      = $item->rekam_suara;
-                $result['rekam_suara_url']  = $item->rekam_suara ? url('storage/' . $item->rekam_suara) : null;
-            } else {
+            if ($isSos) {
                 $result['battery_level']    = $item->battery_level;
                 $result['signal_strength']  = $item->signal_strength;
                 $result['device_info']      = $item->device_info;
@@ -415,7 +423,11 @@ class KasusAktifController extends Controller
                 ]
             );
 
-            broadcast(new SOSUpdateStatus($sos));
+            try {
+                broadcast(new SOSUpdateStatus($sos));
+            } catch (\Throwable $e) {
+                Log::warning("Gagal broadcast SOSUpdateStatus pada tugaskanRelawan: " . $e->getMessage());
+            }
 
             return response()->json([
                 'message' => "Relawan {$relawan->name} berhasil ditugaskan ke Kasus SOS #{$sos->id}",
@@ -588,7 +600,11 @@ class KasusAktifController extends Controller
             ]);
         }
 
-        broadcast(new SOSUpdateStatus($sos));
+        try {
+            broadcast(new SOSUpdateStatus($sos));
+        } catch (\Throwable $e) {
+            Log::warning("Gagal broadcast SOSUpdateStatus pada prosesSOS: " . $e->getMessage());
+        }
 
         return response()->json([
             'message' => "SOS berhasil diubah menjadi {$targetStatus}",

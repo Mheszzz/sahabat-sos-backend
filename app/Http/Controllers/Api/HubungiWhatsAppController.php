@@ -81,8 +81,10 @@ class HubungiWhatsAppController extends Controller
         if (!empty($pengguna->catatan_medis) && $pengguna->catatan_medis !== '-') {
             $lines[] = "• *Catatan Medis*: " . $pengguna->catatan_medis;
         }
+        $idKasus = $kasus->nomor_kasus ?? ($isSos ? "SOS-{$kasus->id}" : "LP-{$kasus->id}");
         $lines[] = "";
-        $lines[] = "📌 *Informasi Kasus*:";
+        $lines[] = "📌 *Informasi Kasus [{$idKasus}]*:";
+        $lines[] = "• *ID Kasus*: " . $idKasus;
         $lines[] = "• *Status*: " . ($isSos ? 'DARURAT SOS' : 'Laporan Warga') . " (" . $jenisKasus . ")";
         $lines[] = "• *Waktu*: " . $waktuStr;
         $lines[] = "• *Lokasi*: " . $lokasi;

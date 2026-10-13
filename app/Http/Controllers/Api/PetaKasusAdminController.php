@@ -23,9 +23,11 @@ class PetaKasusAdminController extends Controller
             ->get();
 
         $titikDaruratSos = $activeSosList->map(function ($sos) {
+            $idKasus = $sos->nomor_kasus ?? ("SOS-" . $sos->id);
             return [
                 'id'                => $sos->id,
-                'id_kasus'          => "#SOS-{$sos->id}",
+                'id_kasus'          => $idKasus,
+                'nomor_kasus'       => $idKasus,
                 'latitude'          => (float) $sos->latitude,
                 'longitude'         => (float) $sos->longitude,
                 'status'            => $sos->status_sos,
@@ -46,9 +48,12 @@ class PetaKasusAdminController extends Controller
             ->get();
 
         $titikLaporanAktif = $laporanAktifList->map(function ($lap) {
+            $idKasus = $lap->nomor_kasus ?? ("LP-" . $lap->id);
             return [
                 'id'               => $lap->id,
-                'id_laporan'       => "#LAPORAN-{$lap->id}",
+                'id_laporan'       => $idKasus,
+                'id_kasus'         => $idKasus,
+                'nomor_kasus'      => $idKasus,
                 'latitude'         => (float) $lap->latitude,
                 'longitude'        => (float) $lap->longitude,
                 'kategori'         => $lap->kategori_laporan,

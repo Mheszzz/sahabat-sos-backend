@@ -433,6 +433,7 @@ class AuthController extends Controller
                 'pekerjaan'           => $request->pekerjaan ?? null,
                 'alasan_relawan'      => $request->alasan_relawan ?? null,
                 'status_verifikasi'   => $request->role === 'relawan' ? 'pending' : 'terverifikasi',
+                'status_ketersediaan' => $request->role === 'relawan' ? 'tersedia' : null,
                 'persetujuan_privasi' => true,
                 'waktu_persetujuan'   => now(),
             ]);

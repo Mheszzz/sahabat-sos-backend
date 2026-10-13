@@ -42,4 +42,13 @@ cd &lt;nama folder&gt;</code></pre>
     <strong>Instal Reverb</strong>
     <pre><code>php artisan install:reverb</code></pre>
   </li>
+
+  <li>
+    <strong>Menjalankan Server & WebSocket Reverb</strong>
+    <p>Jalankan server backend dan websocket reverb di terminal terpisah:</p>
+    <pre><code>php artisan serve
+php artisan reverb:start</code></pre>
+    <p>Atau jalankan seluruh service sekaligus menggunakan Composer:</p>
+    <pre><code>composer dev</code></pre>
+  </li>
 </ol>
