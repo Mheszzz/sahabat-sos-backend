@@ -1,15 +1,22 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
   deploy-to-wsl:
-    needs: test
     runs-on: self-hosted
     steps:
       - name: Update Backend & Restart Services
         run: |
-          # 1. Pindah ke folder backend di home WSL dan pull commit terbaru
-          cd $HOME/SAHABAT-SOS/sahabat-sos-backend
+          # 1. Pindah ke folder backend di WSL (huruf kecil: sahabat-sos) dan tarik update
+          cd $HOME/sahabat-sos/sahabat-sos-backend
           git pull origin main
 
           # 2. Pindah ke folder root Docker Compose
-          cd $HOME/SAHABAT-SOS
+          cd $HOME/sahabat-sos
 
           # 3. Rebuild service backend, reverb, dan queue
           docker compose up -d --build backend reverb queue
