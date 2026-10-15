@@ -104,14 +104,15 @@ class RelawanLocationController extends Controller
             Log::warning("Gagal broadcast RelawanLocationUpdate: " . $e->getMessage());
         }
 
-        // 3. POSTGRESQL SYNC (Throttled 30 detik)
+        // 3. POSTGRESQL SYNC (Throttled 30 detik, tapi langsung jika koordinat di DB masih kosong)
         $lastDbSync = Cache::get("relawan:{$user->id}:last_db_sync");
         $currentTime = time();
 
-        if (!$lastDbSync || ($currentTime - (int)$lastDbSync) >= 30) {
+        if ($user->latitude === null || $user->longitude === null || !$lastDbSync || ($currentTime - (int)$lastDbSync) >= 30) {
             $user->update([
-                'latitude'  => $lat,
-                'longitude' => $lng,
+                'latitude'        => $lat,
+                'longitude'       => $lng,
+                'last_located_at' => now(),
             ]);
             Cache::put("relawan:{$user->id}:last_db_sync", $currentTime, 3600);
         }

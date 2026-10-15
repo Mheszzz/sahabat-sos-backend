@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class DashboardAdminController extends Controller
 {
@@ -166,10 +167,18 @@ class DashboardAdminController extends Controller
 
         $posisiRelawan = User::where('role', 'relawan')
             ->where('is_active', true)
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
             ->get()
             ->map(function ($relawan) {
+                // Ambil koordinat GPS real-time dari cache redis jika baru di-broadcast oleh mobile app relawan
+                $cachedLoc = Cache::get("relawan:{$relawan->id}:location");
+                $lat = isset($cachedLoc['latitude']) ? (float) $cachedLoc['latitude'] : ($relawan->latitude !== null ? (float) $relawan->latitude : null);
+                $lng = isset($cachedLoc['longitude']) ? (float) $cachedLoc['longitude'] : ($relawan->longitude !== null ? (float) $relawan->longitude : null);
+
+                // Lewati jika koordinat belum tersedia sama sekali di cache maupun database
+                if ($lat === null || $lng === null) {
+                    return null;
+                }
+
                 $activeSOS = SOS::with('pengguna')->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                     ->where('id_relawan', $relawan->id)
                     ->first();
@@ -197,8 +206,8 @@ class DashboardAdminController extends Controller
                     'id'           => $relawan->id,
                     'nama'         => $relawan->name,
                     'no_telp'      => $relawan->no_telp,
-                    'latitude'     => (float) $relawan->latitude,
-                    'longitude'    => (float) $relawan->longitude,
+                    'latitude'     => (float) $lat,
+                    'longitude'    => (float) $lng,
                     'status'       => $statusLabel,
                     'kompetensi'   => $this->determineVolunteerCompetency($relawan),
                     'lokasi_user'  => $relawan->lokasi_user ?? 'Area Siaga',
@@ -208,7 +217,9 @@ class DashboardAdminController extends Controller
                         'akurasi' => '±3m',
                     ]
                 ];
-            });
+            })
+            ->filter()
+            ->values();
 
         $gisMap = [
             'titik_darurat'     => $titikDarurat,
@@ -372,6 +383,10 @@ class DashboardAdminController extends Controller
                 $distanceText = $distanceKm < 1 ? round($distanceKm * 1000) . ' m' : "{$distanceKm} km";
             }
 
+            $cachedLoc = Cache::get("relawan:{$relawan->id}:location");
+            $lat = isset($cachedLoc['latitude']) ? (float) $cachedLoc['latitude'] : ($relawan->latitude !== null ? (float) $relawan->latitude : null);
+            $lng = isset($cachedLoc['longitude']) ? (float) $cachedLoc['longitude'] : ($relawan->longitude !== null ? (float) $relawan->longitude : null);
+
             return [
                 'id'            => $relawan->id,
                 'nama'          => $relawan->name,
@@ -380,8 +395,8 @@ class DashboardAdminController extends Controller
                 'jarak_km'      => $distanceKm,
                 'jarak_text'    => $distanceText,
                 'status'        => $isBusy ? 'sedang_bertugas' : 'siaga',
-                'latitude'      => $relawan->latitude !== null ? (float)$relawan->latitude : null,
-                'longitude'     => $relawan->longitude !== null ? (float)$relawan->longitude : null,
+                'latitude'      => $lat,
+                'longitude'     => $lng,
             ];
         });
 

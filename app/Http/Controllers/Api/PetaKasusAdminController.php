@@ -68,14 +68,17 @@ class PetaKasusAdminController extends Controller
         // 3. Posisi Relawan Lapangan (Siaga & Sedang Bertugas)
         $posisiRelawan = User::where('role', 'relawan')
             ->where('is_active', true)
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
             ->get()
             ->map(function ($relawan) {
                 // Ambil koordinat GPS real-time dari cache redis jika baru di-broadcast oleh mobile app relawan
                 $cachedLoc = Cache::get("relawan:{$relawan->id}:location");
-                $lat = $cachedLoc['latitude'] ?? (float) $relawan->latitude;
-                $lng = $cachedLoc['longitude'] ?? (float) $relawan->longitude;
+                $lat = isset($cachedLoc['latitude']) ? (float) $cachedLoc['latitude'] : ($relawan->latitude !== null ? (float) $relawan->latitude : null);
+                $lng = isset($cachedLoc['longitude']) ? (float) $cachedLoc['longitude'] : ($relawan->longitude !== null ? (float) $relawan->longitude : null);
+
+                // Lewati jika koordinat belum tersedia sama sekali di cache maupun database
+                if ($lat === null || $lng === null) {
+                    return null;
+                }
 
                 $activeSOS = SOS::with('pengguna')->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                     ->where('id_relawan', $relawan->id)
@@ -113,7 +116,9 @@ class PetaKasusAdminController extends Controller
                         'akurasi' => '±3m',
                     ]
                 ];
-            });
+            })
+            ->filter()
+            ->values();
 
         // 4. Hitung Total Kasus yang Belum Tertangani (Belum Ditangani)
         $sosBelumTertangani = SOS::whereIn('status_sos', ['belum ditangani', 'aktif'])->count();
