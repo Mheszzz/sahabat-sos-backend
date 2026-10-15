@@ -15,6 +15,8 @@ use App\Models\SOSActivity;
 use App\Services\MapboxService;
 use App\HasGeoCalculations;
 use Illuminate\Support\Facades\Cache;
+use App\Models\Laporan;
+use App\Http\Controllers\Api\KasusAktifController;
 
 class SOSController extends Controller
 {
@@ -233,9 +235,15 @@ class SOSController extends Controller
         // Jika relawan ingin mengambil tugas (ubah status ke 'ditangani')
         if ($request->status_sos === 'ditangani') {
             
-            // Hanya baris yang masih 'belum ditangani' atau 'aktif' yang akan ter-update.
+            // Baris yang masih 'belum ditangani', 'aktif', atau SUDAH ditugaskan ke relawan ini
             $updated = SOS::where('id', $id)
-                ->whereIn('status_sos', ['belum ditangani', 'aktif']) // Kunci keamanan race condition
+                ->where(function ($q) use ($userId) {
+                    $q->whereIn('status_sos', ['belum ditangani', 'aktif'])
+                      ->orWhere(function ($q2) use ($userId) {
+                          $q2->whereIn('status_sos', ['ditangani', 'proses'])
+                             ->where('id_relawan', $userId);
+                      });
+                })
                 ->update([
                     'status_sos' => 'ditangani',
                     'id_relawan' => $userId,
@@ -318,10 +326,26 @@ class SOSController extends Controller
 
         $sos = SOS::with(['pengguna', 'relawan', 'activities.user'])
             ->where('id_relawan', $user->id)
-            ->where('status_sos', 'ditangani')
+            ->whereIn('status_sos', ['ditangani', 'proses', 'aktif'])
+            ->latest('updated_at')
             ->first();
 
         if (!$sos) {
+            // Fallback: cek apakah ada tugas laporan aktif yang sedang ditangani relawan ini
+            $laporan = Laporan::with(['pengguna', 'relawan'])
+                ->where('id_relawan', $user->id)
+                ->whereIn('status', ['ditangani', 'proses'])
+                ->latest('updated_at')
+                ->first();
+
+            if ($laporan) {
+                $laporanData = KasusAktifController::transformItem($laporan, 'laporan', true);
+                return response()->json([
+                    'message' => 'Tugas laporan aktif.',
+                    'data'    => $laporanData,
+                ]);
+            }
+
             return response()->json([
                 'message' => 'Tidak ada tugas SOS aktif.',
                 'data'    => null
