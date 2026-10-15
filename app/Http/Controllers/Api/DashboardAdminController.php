@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
 
 class DashboardAdminController extends Controller
 {
@@ -36,6 +38,29 @@ class DashboardAdminController extends Controller
         $laporanKemarin = Laporan::whereDate('created_at', $yesterday)->count();
         $laporanTrenPercentage = $this->calculateTrendPercentage($laporanHariIni, $laporanKemarin);
 
+        // Kasus Periode (Hari Ini, Minggu Lalu, Bulan Lalu)
+        $startLastWeek = now()->subWeek()->startOfWeek(CarbonInterface::SUNDAY)->startOfDay();
+        $endLastWeek = now()->subWeek()->endOfWeek(CarbonInterface::SATURDAY)->endOfDay();
+        $sosMingguLalu = SOS::where(function ($q) use ($startLastWeek, $endLastWeek) {
+            $q->whereBetween('waktu_sos', [$startLastWeek, $endLastWeek])
+              ->orWhere(function ($sub) use ($startLastWeek, $endLastWeek) {
+                  $sub->whereNull('waktu_sos')->whereBetween('created_at', [$startLastWeek, $endLastWeek]);
+              });
+        })->count();
+        $laporanMingguLalu = Laporan::whereBetween('created_at', [$startLastWeek, $endLastWeek])->count();
+        $totalMingguLalu = $sosMingguLalu + $laporanMingguLalu;
+
+        $startLastMonth = now()->subMonth()->startOfMonth()->startOfDay();
+        $endLastMonth = now()->subMonth()->endOfMonth()->endOfDay();
+        $sosBulanLalu = SOS::where(function ($q) use ($startLastMonth, $endLastMonth) {
+            $q->whereBetween('waktu_sos', [$startLastMonth, $endLastMonth])
+              ->orWhere(function ($sub) use ($startLastMonth, $endLastMonth) {
+                  $sub->whereNull('waktu_sos')->whereBetween('created_at', [$startLastMonth, $endLastMonth]);
+              });
+        })->count();
+        $laporanBulanLalu = Laporan::whereBetween('created_at', [$startLastMonth, $endLastMonth])->count();
+        $totalBulanLalu = $sosBulanLalu + $laporanBulanLalu;
+
         $daruratSosAktifCount = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])->count();
 
         // Relawan stats
@@ -55,6 +80,14 @@ class DashboardAdminController extends Controller
         $relawanSiagaCount = max(0, $totalRelawan - $relawanSedangBertugasCount - $relawanOffCount);
 
         $kpi = [
+            'total_kasus_hari_ini' => $sosHariIni + $laporanHariIni,
+            'total_kasus_minggu_lalu' => $totalMingguLalu,
+            'total_kasus_bulan_lalu' => $totalBulanLalu,
+            'kasus_periode' => [
+                'hari_ini'    => $sosHariIni + $laporanHariIni,
+                'minggu_lalu' => $totalMingguLalu,
+                'bulan_lalu'  => $totalBulanLalu,
+            ],
             'panggilan_sos_hari_ini' => [
                 'total' => $sosHariIni,
                 'tren'  => $sosTrenPercentage >= 0 ? "+{$sosTrenPercentage}%" : "{$sosTrenPercentage}%",

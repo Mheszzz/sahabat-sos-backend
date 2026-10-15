@@ -35,6 +35,8 @@ class PetaKasusAdminController extends Controller
                 'korban'            => $sos->pengguna->name ?? 'Pengguna SOS',
                 'jenis_disabilitas' => $sos->pengguna->kategori_user ?? 'umum',
                 'relawan_penangan'  => $sos->relawan->name ?? null,
+                'alamat'            => $sos->pengguna->alamat ?? null,
+                'lokasi'            => $sos->pengguna->alamat ?? null,
                 'waktu_sos'         => $sos->waktu_sos ? $sos->waktu_sos->toIso8601String() : null,
             ];
         });
@@ -61,6 +63,9 @@ class PetaKasusAdminController extends Controller
                 'urgensi'          => 'sedang',
                 'pelapor'          => $lap->pengguna->name ?? 'Pengguna',
                 'relawan_penangan' => $lap->relawan->name ?? null,
+                'lokasi_laporan'   => $lap->lokasi_laporan,
+                'alamat'           => $lap->lokasi_laporan ?? ($lap->pengguna->alamat ?? null),
+                'lokasi'           => $lap->lokasi_laporan ?? ($lap->pengguna->alamat ?? null),
                 'waktu_laporan'    => $lap->waktu_laporan ? $lap->waktu_laporan->toIso8601String() : null,
             ];
         });
