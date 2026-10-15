@@ -115,11 +115,20 @@ class PetaKasusAdminController extends Controller
                 ];
             });
 
+        // 4. Hitung Total Kasus yang Belum Tertangani (Belum Ditangani)
+        $sosBelumTertangani = SOS::whereIn('status_sos', ['belum ditangani', 'aktif'])->count();
+        $laporanBelumTertangani = Laporan::whereIn('status', ['belum ditangani', 'menunggu', 'aktif'])->count();
+        $totalBelumTertangani = $sosBelumTertangani + $laporanBelumTertangani;
+
         return response()->json([
             'message' => 'Berhasil mengambil data peta kasus aktif & posisi relawan',
             'summary' => [
                 'total_sos_aktif'               => $titikDaruratSos->count(),
                 'total_laporan_aktif'           => $titikLaporanAktif->count(),
+                'total_sos_belum_tertangani'    => $sosBelumTertangani,
+                'total_laporan_belum_tertangani'=> $laporanBelumTertangani,
+                'total_belum_tertangani'        => $totalBelumTertangani,
+                'total_kasus_belum_tertangani'  => $totalBelumTertangani,
                 'total_relawan_siaga_bebas'     => $posisiRelawan->where('status', 'siaga_bebas')->count(),
                 'total_relawan_dalam_misi'      => $posisiRelawan->where('status', 'dalam_misi')->count(),
                 'total_relawan_off_istirahat'   => $posisiRelawan->where('status', 'off_istirahat')->count(),

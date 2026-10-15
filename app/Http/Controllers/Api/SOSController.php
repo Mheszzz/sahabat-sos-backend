@@ -25,6 +25,7 @@ class SOSController extends Controller
             'longitude'       => 'required|numeric',
             'battery_level'   => 'nullable|integer|between:0,100',
             'signal_strength' => 'nullable|string|max:50',
+            'trigger_source'  => 'nullable|string|max:50',
             'device_info'     => 'nullable',
         ]);
 
@@ -51,6 +52,25 @@ class SOSController extends Controller
             ], 422);
         }
 
+        // Siapkan device_info
+        $deviceInfo = $request->device_info;
+        if (is_string($deviceInfo)) {
+            $deviceInfo = json_decode($deviceInfo, true) ?? [];
+        }
+        if (!is_array($deviceInfo)) {
+            $deviceInfo = [];
+        }
+
+        if ($request->filled('trigger_source')) {
+            $deviceInfo['trigger_source'] = $request->trigger_source;
+        }
+
+        $batteryLevel = $request->battery_level
+            ?? ($deviceInfo['mobile']['battery_level'] ?? ($deviceInfo['battery_level'] ?? 85));
+
+        $signalStrength = $request->signal_strength
+            ?? ($deviceInfo['mobile']['signal_strength'] ?? ($deviceInfo['signal_strength'] ?? '4G'));
+
         // Simpan data SOS ke database
         $sos = SOS::create([
             'id_pengguna'     => $userId,
@@ -58,9 +78,9 @@ class SOSController extends Controller
             'longitude'       => $lng,
             'status_sos'      => 'belum ditangani',
             'waktu_sos'       => now(),
-            'battery_level'   => $request->battery_level ?? 85,
-            'signal_strength' => $request->signal_strength ?? '4G',
-            'device_info'     => $request->device_info ?? null,
+            'battery_level'   => (int) $batteryLevel,
+            'signal_strength' => (string) $signalStrength,
+            'device_info'     => $deviceInfo,
         ]);
 
         // Catat log aktivitas awal

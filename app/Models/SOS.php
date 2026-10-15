@@ -82,22 +82,87 @@ class SOS extends Model
     }
 
     /**
-     * Accessor untuk device_info agar selalu mengembalikan status perangkat (baterai, sinyal, dll.)
+     * Accessor untuk device_info agar selalu mengembalikan status perangkat (HP & Tuya IoT)
      */
     public function getDeviceInfoAttribute($value)
     {
         $raw = !empty($value) ? (is_array($value) ? $value : json_decode($value, true)) : [];
-        
-        $battery = $this->attributes['battery_level'] ?? ($raw['battery_level'] ?? 85);
-        $signal = $this->attributes['signal_strength'] ?? ($raw['signal_strength'] ?? '4G / Kuat');
+
+        // Deteksi format terstruktur (punya key 'mobile' atau 'tuya') atau legacy flat
+        $hasStructured = isset($raw['mobile']) || isset($raw['tuya']);
+        $mobileRaw = $hasStructured ? ($raw['mobile'] ?? []) : $raw;
+        $tuyaRaw = $raw['tuya'] ?? null;
+
+        // Telemetri Mobile (HP Pengguna)
+        $batteryLevel = $mobileRaw['battery_level'] ?? ($this->attributes['battery_level'] ?? ($raw['battery_level'] ?? 85));
+        $batteryLevel = (int) $batteryLevel;
+        $isCharging = (bool) ($mobileRaw['is_charging'] ?? false);
+        $batteryState = $mobileRaw['battery_state'] ?? ($isCharging ? 'charging' : 'discharging');
+
+        $batteryStatus = 'Baik';
+        if ($batteryLevel < 20) {
+            $batteryStatus = 'Kritis';
+        } elseif ($batteryLevel < 50) {
+            $batteryStatus = 'Sedang';
+        }
+
+        $signalStrength = $mobileRaw['signal_strength'] ?? ($this->attributes['signal_strength'] ?? ($raw['signal_strength'] ?? '4G / Kuat'));
+
+        $mobile = [
+            'brand'           => $mobileRaw['brand'] ?? 'Perangkat Mobile',
+            'model'           => $mobileRaw['model'] ?? ($mobileRaw['device_model'] ?? 'Ponsel Pengguna'),
+            'os_version'      => $mobileRaw['os_version'] ?? 'Android/iOS',
+            'battery_level'   => $batteryLevel,
+            'battery_status'  => $batteryStatus,
+            'battery_state'   => $batteryState,
+            'is_charging'     => $isCharging,
+            'is_critical'     => $batteryLevel < 20,
+            'signal_strength' => $signalStrength,
+            'gps_accuracy'    => $mobileRaw['gps_accuracy'] ?? null,
+            'device_id'       => $this->pengguna?->device_id ?? ($mobileRaw['device_id'] ?? null),
+            'updated_at'      => $mobileRaw['updated_at'] ?? ($this->waktu_sos ? $this->waktu_sos->toDateTimeString() : null),
+        ];
+
+        // Telemetri Perangkat IoT Tuya (jika ada)
+        $tuya = null;
+        if (!empty($tuyaRaw)) {
+            $tuyaBattery = isset($tuyaRaw['battery_level']) && $tuyaRaw['battery_level'] !== null
+                ? (int) $tuyaRaw['battery_level']
+                : null;
+            $tuyaIsOnline = (bool) ($tuyaRaw['is_online'] ?? true);
+
+            $tuya = [
+                'device_id'       => $tuyaRaw['device_id'] ?? 'tuya_device',
+                'device_name'     => $tuyaRaw['device_name'] ?? ($tuyaRaw['name'] ?? 'Tombol Darurat IoT Tuya'),
+                'product_id'      => $tuyaRaw['product_id'] ?? null,
+                'is_online'       => $tuyaIsOnline,
+                'battery_level'   => $tuyaBattery,
+                'battery_status'  => $tuyaBattery !== null ? ($tuyaBattery < 20 ? 'Kritis' : ($tuyaBattery < 50 ? 'Sedang' : 'Baik')) : 'N/A',
+                'is_battery_low'  => $tuyaBattery !== null && $tuyaBattery < 20,
+                'signal_strength' => $tuyaRaw['signal_strength'] ?? 'Bagus',
+                'trigger_type'    => $tuyaRaw['trigger_type'] ?? 'Tombol Fisik Tuya',
+                'last_seen'       => $tuyaRaw['last_seen'] ?? ($tuyaRaw['last_event_at'] ?? null),
+            ];
+        }
+
+        $triggerSource = $raw['trigger_source'] ?? ($tuya ? 'tuya_physical_button' : 'app_button');
 
         return [
-            'battery_level'   => (int) $battery,
-            'battery_status'  => $battery < 20 ? 'Kritis' : ($battery < 50 ? 'Sedang' : 'Baik'),
-            'signal_strength' => $signal,
-            'device_id'       => $this->pengguna?->device_id ?? ($raw['device_id'] ?? null),
-            'device_model'    => $raw['device_model'] ?? ($raw['model'] ?? 'Perangkat Mobile Korban'),
-            'os_version'      => $raw['os_version'] ?? 'Android/iOS',
+            // Flat alias untuk kompatibilitas kode lama
+            'battery_level'   => $batteryLevel,
+            'battery_status'  => $batteryStatus,
+            'signal_strength' => $signalStrength,
+            'device_id'       => $mobile['device_id'],
+            'device_model'    => trim(($mobile['brand'] ?? '') . ' ' . ($mobile['model'] ?? '')),
+            'os_version'      => $mobile['os_version'],
+            'is_online'       => true,
+            'is_charging'     => $isCharging,
+
+            // Struktur lengkap telemetri baru
+            'trigger_source'  => $triggerSource,
+            'is_warning'      => ($batteryLevel < 20) || ($tuya && $tuya['is_battery_low']),
+            'mobile'          => $mobile,
+            'tuya'            => $tuya,
         ];
     }
 
