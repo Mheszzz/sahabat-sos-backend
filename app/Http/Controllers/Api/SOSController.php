@@ -85,17 +85,34 @@ class SOSController extends Controller
             'device_info'     => $deviceInfo,
         ]);
 
+        // Siapkan deskripsi aktivitas berdasarkan sumber pemicu
+        $activityDesc = "Sinyal darurat SOS diaktifkan oleh {$request->user()->name}";
+        $triggerSrc = $sos->device_info['trigger_source'] ?? 'app_button';
+        if ($triggerSrc === 'tuya_physical_button') {
+            $activityDesc = "Sinyal darurat SOS diaktifkan melalui Tombol Fisik Darurat Tuya.";
+        } elseif (in_array($triggerSrc, ['smartwatch_button', 'smartwatch_fall_detection'])) {
+            $watchModel = $sos->device_info['smartwatch']['device_model'] ?? 'Smartwatch';
+            $bpm = $sos->device_info['smartwatch']['heart_rate'] ?? null;
+            $bpmText = $bpm ? " (Detak jantung: {$bpm} BPM)" : '';
+            if ($triggerSrc === 'smartwatch_fall_detection') {
+                $activityDesc = "Sinyal darurat SOS dipicu otomatis oleh Deteksi Jatuh pada {$watchModel}{$bpmText}.";
+            } else {
+                $activityDesc = "Sinyal darurat SOS diaktifkan melalui Tombol Darurat pada {$watchModel}{$bpmText}.";
+            }
+        }
+
         // Catat log aktivitas awal
         SOSActivity::record(
             $sos->id,
             'sos_dipicu',
-            "Sinyal darurat SOS diaktifkan oleh {$request->user()->name}",
+            $activityDesc,
             $userId,
             [
-                'latitude'      => $lat,
-                'longitude'     => $lng,
-                'battery_level' => $sos->battery_level,
-                'signal'        => $sos->signal_strength,
+                'latitude'       => $lat,
+                'longitude'      => $lng,
+                'battery_level'  => $sos->battery_level,
+                'signal'         => $sos->signal_strength,
+                'trigger_source' => $triggerSrc,
             ]
         );
 
