@@ -50,7 +50,8 @@ class SOSController extends Controller
 
         if ($activeSos) {
             return response()->json([
-                'message' => 'Anda masih memiliki sinyal SOS aktif yang sedang diproses.'
+                'message' => 'Anda masih memiliki sinyal SOS aktif yang sedang diproses.',
+                'data'    => $activeSos,
             ], 422);
         }
 
