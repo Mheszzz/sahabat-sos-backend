@@ -31,7 +31,6 @@ class SOS extends Model
     ];
 
     protected $appends = [
-        'device_info',
         'id_kasus',
     ];
 
@@ -84,8 +83,9 @@ class SOS extends Model
     /**
      * Accessor untuk device_info agar selalu mengembalikan status perangkat (HP & Tuya IoT)
      */
-    public function getDeviceInfoAttribute($value)
+    public function getDeviceInfoAttribute($value = null)
     {
+        $value = $value ?? ($this->attributes['device_info'] ?? null);
         $raw = !empty($value) ? (is_array($value) ? $value : json_decode($value, true)) : [];
 
         // Deteksi format terstruktur (punya key 'mobile' atau 'tuya') atau legacy flat
@@ -159,10 +159,15 @@ class SOS extends Model
             'is_charging'     => $isCharging,
 
             // Struktur lengkap telemetri baru
-            'trigger_source'  => $triggerSource,
-            'is_warning'      => ($batteryLevel < 20) || ($tuya && $tuya['is_battery_low']),
-            'mobile'          => $mobile,
-            'tuya'            => $tuya,
+            'trigger_source'       => $triggerSource,
+            'is_warning'           => ($batteryLevel < 20) || ($tuya && $tuya['is_battery_low']),
+            'is_gps_fallback'      => (bool) ($raw['is_gps_fallback'] ?? false),
+            'gps_status'           => $raw['gps_status'] ?? 'live_gps',
+            'gps_fallback_source'  => $raw['gps_fallback_source'] ?? null,
+            'gps_note'             => $raw['gps_note'] ?? null,
+            'original_coordinates' => $raw['original_coordinates'] ?? null,
+            'mobile'               => $mobile,
+            'tuya'                 => $tuya,
         ];
     }
 

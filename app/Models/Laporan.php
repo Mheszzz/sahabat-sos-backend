@@ -31,6 +31,8 @@ class Laporan extends Model
 
     protected $appends = [
         'id_kasus',
+        'foto_laporan_url',
+        'rekam_suara_url',
     ];
 
     /**
@@ -77,6 +79,22 @@ class Laporan extends Model
     public function getIdKasusAttribute(): string
     {
         return $this->nomor_kasus ?? ('LP-' . $this->id);
+    }
+
+    /**
+     * Accessor untuk foto_laporan_url
+     */
+    public function getFotoLaporanUrlAttribute(): ?string
+    {
+        return $this->foto_laporan ? url('storage/' . $this->foto_laporan) : null;
+    }
+
+    /**
+     * Accessor untuk rekam_suara_url
+     */
+    public function getRekamSuaraUrlAttribute(): ?string
+    {
+        return $this->rekam_suara ? url('storage/' . $this->rekam_suara) : null;
     }
 
     /**

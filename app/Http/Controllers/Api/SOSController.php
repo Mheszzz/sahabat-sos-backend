@@ -22,9 +22,97 @@ class SOSController extends Controller
 {
     public function store(Request $request)
     {
+        $user = $request->user();
+        $latInput = $request->input('latitude');
+        $lngInput = $request->input('longitude');
+
+        // Deteksi koordinat kosong / tidak valid / gagal lock GPS (0, 0) / izin lokasi mati (null / '')
+        $isEmptyCoords = (
+            $latInput === null ||
+            $latInput === '' ||
+            $lngInput === null ||
+            $lngInput === '' ||
+            !is_numeric($latInput) ||
+            !is_numeric($lngInput) ||
+            ((float) $latInput == 0.0 && (float) $lngInput == 0.0) ||
+            (float) $latInput < -90 || (float) $latInput > 90 ||
+            (float) $lngInput < -180 || (float) $lngInput > 180
+        );
+
+        $isFallback = false;
+        $fallbackSource = null;
+        $fallbackLabel = null;
+        $fallbackLat = null;
+        $fallbackLng = null;
+
+        if ($isEmptyCoords) {
+            // 1. Hierarki Fallback 1: Profil Pengguna
+            if ($user && $user->latitude && $user->longitude && (float) $user->latitude != 0.0 && (float) $user->longitude != 0.0) {
+                $fallbackLat = (float) $user->latitude;
+                $fallbackLng = (float) $user->longitude;
+                $fallbackSource = 'profile';
+                $fallbackLabel = 'Profil Pengguna';
+                $isFallback = true;
+            }
+            // 2. Hierarki Fallback 2: Riwayat Laporan Terakhir Pengguna
+            elseif ($user) {
+                $lastLaporan = Laporan::where('id_pengguna', $user->id)
+                    ->whereNotNull('latitude')
+                    ->whereNotNull('longitude')
+                    ->where('latitude', '!=', 0)
+                    ->where('longitude', '!=', 0)
+                    ->latest('id')
+                    ->first();
+
+                if ($lastLaporan) {
+                    $fallbackLat = (float) $lastLaporan->latitude;
+                    $fallbackLng = (float) $lastLaporan->longitude;
+                    $fallbackSource = 'riwayat_laporan';
+                    $fallbackLabel = 'Riwayat Laporan Terakhir';
+                    $isFallback = true;
+                }
+            }
+
+            // 3. Hierarki Fallback 3: Riwayat Kasus SOS Terakhir Pengguna
+            if (!$isFallback && $user) {
+                $lastSos = SOS::where('id_pengguna', $user->id)
+                    ->whereNotNull('latitude')
+                    ->whereNotNull('longitude')
+                    ->where('latitude', '!=', 0)
+                    ->where('longitude', '!=', 0)
+                    ->latest('id')
+                    ->first();
+
+                if ($lastSos) {
+                    $fallbackLat = (float) $lastSos->latitude;
+                    $fallbackLng = (float) $lastSos->longitude;
+                    $fallbackSource = 'riwayat_sos';
+                    $fallbackLabel = 'Riwayat Kasus SOS Terakhir';
+                    $isFallback = true;
+                }
+            }
+
+            if ($isFallback) {
+                $request->merge([
+                    'latitude'  => $fallbackLat,
+                    'longitude' => $fallbackLng,
+                ]);
+                Log::info("SOS latitude/longitude fallback to {$fallbackLabel} for user #{$user->id}: lat={$fallbackLat}, lng={$fallbackLng}");
+            } else {
+                // Cegah penyimpanan titik (0, 0) Null Island jika koordinat tidak valid dan profil kosong
+                return response()->json([
+                    'message' => 'Satelit GPS belum terkunci (koordinat 0.0) atau izin lokasi dinonaktifkan, dan profil Anda belum memiliki koordinat tersimpan. Mohon aktifkan GPS atau lengkapi alamat di profil.',
+                    'errors'  => [
+                        'latitude'  => ['Koordinat GPS tidak valid atau satelit belum terkunci.'],
+                        'longitude' => ['Koordinat GPS tidak valid atau satelit belum terkunci.'],
+                    ],
+                ], 422);
+            }
+        }
+
         $request->validate([
-            'latitude'        => 'required|numeric',
-            'longitude'       => 'required|numeric',
+            'latitude'        => 'required|numeric|between:-90,90',
+            'longitude'       => 'required|numeric|between:-180,180',
             'battery_level'   => 'nullable|integer|between:0,100',
             'signal_strength' => 'nullable|string|max:50',
             'trigger_source'  => 'nullable|string|max:50',
@@ -33,13 +121,6 @@ class SOSController extends Controller
 
         $lat = (float) $request->latitude;
         $lng = (float) $request->longitude;
-
-        // Fallback jika mobile gagal lock GPS dan mengirim 0, 0: gunakan lokasi terakhir user di profil
-        if (($lat == 0.0 && $lng == 0.0) && $request->user()->latitude && $request->user()->longitude) {
-            $lat = (float) $request->user()->latitude;
-            $lng = (float) $request->user()->longitude;
-            Log::info("SOS latitude/longitude fallback to user profile: lat={$lat}, lng={$lng}");
-        }
 
         $userId = $request->user()->id;
 
@@ -67,6 +148,17 @@ class SOSController extends Controller
             $deviceInfo['trigger_source'] = $request->trigger_source;
         }
 
+        if ($isFallback) {
+            $deviceInfo['is_gps_fallback'] = true;
+            $deviceInfo['gps_status'] = 'fallback_' . $fallbackSource;
+            $deviceInfo['gps_fallback_source'] = $fallbackLabel;
+            $deviceInfo['gps_note'] = "Koordinat darurat menggunakan {$fallbackLabel} (GPS perangkat 0,0 atau izin lokasi dinonaktifkan).";
+            $deviceInfo['original_coordinates'] = [
+                'latitude'  => $latInput,
+                'longitude' => $lngInput,
+            ];
+        }
+
         $batteryLevel = $request->battery_level
             ?? ($deviceInfo['mobile']['battery_level'] ?? ($deviceInfo['battery_level'] ?? 85));
 
@@ -89,15 +181,36 @@ class SOSController extends Controller
         SOSActivity::record(
             $sos->id,
             'sos_dipicu',
-            "Sinyal darurat SOS diaktifkan oleh {$request->user()->name}",
+            "Sinyal darurat SOS diaktifkan oleh {$request->user()->name}" . ($isFallback ? " (Menggunakan lokasi {$fallbackLabel})" : ""),
             $userId,
             [
-                'latitude'      => $lat,
-                'longitude'     => $lng,
-                'battery_level' => $sos->battery_level,
-                'signal'        => $sos->signal_strength,
+                'latitude'        => $lat,
+                'longitude'       => $lng,
+                'is_gps_fallback' => $isFallback,
+                'fallback_source' => $fallbackSource,
+                'battery_level'   => $sos->battery_level,
+                'signal'          => $sos->signal_strength,
             ]
         );
+
+        if ($isFallback) {
+            SOSActivity::record(
+                $sos->id,
+                'gps_fallback',
+                "GPS perangkat tidak terkunci (0,0 atau izin lokasi mati). Titik darurat otomatis dialihkan ke {$fallbackLabel} (Lat: {$lat}, Lng: {$lng}).",
+                $userId,
+                [
+                    'fallback_source'      => $fallbackSource,
+                    'fallback_label'       => $fallbackLabel,
+                    'latitude'             => $lat,
+                    'longitude'            => $lng,
+                    'original_coordinates' => [
+                        'latitude'  => $latInput,
+                        'longitude' => $lngInput,
+                    ],
+                ]
+            );
+        }
 
         // 1. Tahap 1: Broadcast ke semua relawan tersedia dalam radius 2 km
         $volunteers2km = User::where('role', 'relawan')
@@ -397,9 +510,11 @@ class SOSController extends Controller
     // pengguna membatalkan SOS yang masih aktif atau dalam proses
     public function cancel(Request $request, $id)
     {
-        // Validasi opsional: alasan_batal boleh dikirim, boleh tidak
+        // Validasi opsional: alasan_batal boleh dikirim, boleh tidak (mendukung alias alasan / reason)
         $request->validate([
             'alasan_batal' => 'nullable|string|max:255',
+            'alasan'       => 'nullable|string|max:255',
+            'reason'       => 'nullable|string|max:255',
         ]);
 
         $user = $request->user();
@@ -407,7 +522,7 @@ class SOSController extends Controller
 
         $sos = SOS::where('id', $id)
             ->where('id_pengguna', $userId)
-            ->whereIn('status_sos', ['belum ditangani', 'ditangani'])
+            ->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
             ->first();
 
         if (!$sos) {
@@ -416,9 +531,11 @@ class SOSController extends Controller
             ], 404);
         }
 
+        $alasan = $request->input('alasan_batal') ?? $request->input('alasan') ?? $request->input('reason');
+
         // Ambil nilai dari request, jika tidak diisi akan otomatis null
         $sos->status_sos = 'batal';
-        $sos->alasan_batal = $request->input('alasan_batal'); 
+        $sos->alasan_batal = $alasan;
         $sos->save();
 
         SOSActivity::record(

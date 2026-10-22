@@ -34,6 +34,19 @@ class KontakDaruratController extends Controller
     {
         $user = $request->user();
 
+        // Normalisasi alias field jika dikirimkan oleh Postman atau format legacy
+        if (!$request->has('nama') && $request->has('nama_kontak')) {
+            $request->merge(['nama' => $request->nama_kontak]);
+        }
+        if (!$request->has('no_telp') && $request->has('nomor_telepon')) {
+            $request->merge(['no_telp' => $request->nomor_telepon]);
+        } elseif (!$request->has('no_telp') && $request->has('phone')) {
+            $request->merge(['no_telp' => $request->phone]);
+        }
+        if (!$request->has('pesan') && $request->has('hubungan')) {
+            $request->merge(['pesan' => 'Hubungan: ' . $request->hubungan]);
+        }
+
         $validator = Validator::make($request->all(), [
             'nama'         => 'required|string|max:255',
             'no_telp'      => 'required|string|max:20',
@@ -49,9 +62,13 @@ class KontakDaruratController extends Controller
             ], 422);
         }
 
-        $tipe = $request->input('tipe', 'sekunder');
-        $terimaNotif = $request->has('terima_notif') 
-            ? filter_var($request->terima_notif, FILTER_VALIDATE_BOOLEAN) 
+        // Jika user belum memiliki kontak apapun, otomatis jadikan kontak pertama sebagai 'utama'
+        $existingCount = Kontak_darurat::where('id_pengguna', $user->id)->count();
+        $defaultTipe = ($existingCount === 0) ? 'utama' : 'sekunder';
+        $tipe = $request->input('tipe', $defaultTipe);
+
+        $terimaNotif = $request->has('terima_notif')
+            ? filter_var($request->terima_notif, FILTER_VALIDATE_BOOLEAN)
             : true;
 
         // Jika kontak baru diset sebagai 'utama', demote kontak utama sebelumnya menjadi 'sekunder'
@@ -114,6 +131,19 @@ class KontakDaruratController extends Controller
             return response()->json([
                 'message' => 'Kontak darurat tidak ditemukan',
             ], 404);
+        }
+
+        // Normalisasi alias field
+        if (!$request->has('nama') && $request->has('nama_kontak')) {
+            $request->merge(['nama' => $request->nama_kontak]);
+        }
+        if (!$request->has('no_telp') && $request->has('nomor_telepon')) {
+            $request->merge(['no_telp' => $request->nomor_telepon]);
+        } elseif (!$request->has('no_telp') && $request->has('phone')) {
+            $request->merge(['no_telp' => $request->phone]);
+        }
+        if (!$request->has('pesan') && $request->has('hubungan')) {
+            $request->merge(['pesan' => 'Hubungan: ' . $request->hubungan]);
         }
 
         $validator = Validator::make($request->all(), [
@@ -181,7 +211,18 @@ class KontakDaruratController extends Controller
             ], 404);
         }
 
+        $wasUtama = ($kontak->tipe === 'utama');
         $kontak->delete();
+
+        // Jika kontak utama yang dihapus dan masih ada kontak lain, promosikan kontak tertua menjadi utama
+        if ($wasUtama) {
+            $next = Kontak_darurat::where('id_pengguna', $user->id)
+                ->orderBy('created_at', 'asc')
+                ->first();
+            if ($next) {
+                $next->update(['tipe' => 'utama']);
+            }
+        }
 
         return response()->json([
             'message' => 'Kontak darurat berhasil dihapus',

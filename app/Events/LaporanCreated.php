@@ -56,12 +56,16 @@ class LaporanCreated implements ShouldBroadcastNow
     {
         return [
             'id'                       => $this->laporan->id,
+            'id_kasus'                 => $this->laporan->id_kasus,
+            'nomor_kasus'              => $this->laporan->nomor_kasus,
             'kategori_laporan'         => $this->laporan->kategori_laporan,
             'lokasi_laporan'           => $this->laporan->lokasi_laporan,
             'latitude'                 => $this->laporan->latitude,
             'longitude'                => $this->laporan->longitude,
             'deskripsi'                => $this->laporan->deskripsi,
             'waktu_laporan'            => $this->laporan->waktu_laporan,
+            'foto_laporan_url'         => $this->laporan->foto_laporan_url,
+            'rekam_suara_url'          => $this->laporan->rekam_suara_url,
             'pengguna_nama'            => $this->laporan->pengguna?->name,
             'nearby_volunteers_count'  => $this->nearbyVolunteersCount,
         ];

@@ -170,12 +170,6 @@ class HubungiWhatsAppController extends Controller
     public function hubungi(Request $request, $tipe, $id)
     {
         $user = $request->user();
-        if (!$user->hasPermission('kelola_laporan') && !$user->hasPermission('pantau_peta')) {
-            return response()->json([
-                'message' => "Akses ditolak. Anda belum memiliki hak akses 'kelola_laporan'."
-            ], 403);
-        }
-
         $tipeLower = strtolower($tipe);
         $kasus = null;
 
@@ -191,6 +185,19 @@ class HubungiWhatsAppController extends Controller
 
         if (!$kasus) {
             return response()->json(['message' => ucfirst($tipe) . ' tidak ditemukan'], 404);
+        }
+
+        // Otorisasi: Admin/Superadmin dengan izin kelola_laporan/pantau_peta ATAU Relawan penanggung jawab kasus ini
+        $isAdmin = in_array($user->role, ['admin', 'superadmin']) ||
+                   $user->hasPermission('kelola_laporan') ||
+                   $user->hasPermission('pantau_peta');
+
+        $isAssignedRelawan = ($user->role === 'relawan' && (int)$kasus->id_relawan === (int)$user->id);
+
+        if (!$isAdmin && !$isAssignedRelawan) {
+            return response()->json([
+                'message' => 'Akses ditolak. Anda bukan relawan penanggung jawab kasus ini atau administrator yang berwenang.'
+            ], 403);
         }
 
         $pengguna = $kasus->pengguna;
@@ -275,10 +282,11 @@ class HubungiWhatsAppController extends Controller
         // Catat aktivitas log jika kasus SOS
         if ($tipeLower === 'sos' && ($request->isMethod('post') || $request->has('kontak_id') || $request->has('log_activity'))) {
             $labelAktivitas = $targetKontak->tipe === 'utama' ? 'Kontak Darurat Utama' : 'Kontak Darurat';
+            $peranLabel = ($user->role === 'relawan') ? 'Relawan' : 'Admin';
             SOSActivity::record(
                 $kasus->id,
                 'kontak_darurat_wa',
-                "Admin {$user->name} menghubungi {$labelAktivitas} {$targetKontak->nama} ({$targetKontak->no_telp}) via WhatsApp",
+                "{$peranLabel} {$user->name} menghubungi {$labelAktivitas} {$targetKontak->nama} ({$targetKontak->no_telp}) via WhatsApp",
                 $user->id,
                 [
                     'kontak_id'   => $targetKontak->id,

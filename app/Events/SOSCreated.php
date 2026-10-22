@@ -85,6 +85,8 @@ class SOSCreated implements ShouldBroadcastNow
     {
         return [
             'id'          => $this->sos->id,
+            'id_kasus'    => $this->sos->id_kasus,
+            'nomor_kasus' => $this->sos->nomor_kasus,
             'id_pengguna' => $this->sos->id_pengguna,
             'id_relawan'  => $this->sos->id_relawan ?? null,
             'latitude'    => $this->sos->latitude,

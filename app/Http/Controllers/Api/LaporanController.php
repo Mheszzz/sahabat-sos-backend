@@ -50,7 +50,7 @@ class LaporanController extends Controller
         if ($request->has('status')) {
             $statusInput = strtolower(trim($request->status));
             $statusFilter = match ($statusInput) {
-                'aktif', 'belum ditangani', 'belum_ditangani' => ['belum ditangani', 'aktif'],
+                'aktif', 'belum ditangani', 'belum_ditangani', 'belum tertangani', 'belum_tertangani', 'menunggu', 'pending' => ['belum ditangani', 'aktif'],
                 'proses', 'ditangani' => ['ditangani', 'proses'],
                 'selesai' => ['selesai'],
                 default => [$statusInput]
@@ -82,7 +82,28 @@ class LaporanController extends Controller
      */
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $input = $request->all();
+
+        // Normalisasi alias input payload
+        if (!isset($input['kategori_laporan']) && isset($input['kategori'])) {
+            $input['kategori_laporan'] = $input['kategori'];
+        }
+        if (!isset($input['lokasi_laporan'])) {
+            $input['lokasi_laporan'] = $input['lokasi'] ?? ($input['alamat'] ?? null);
+        }
+
+        // Tangkap file upload dengan fallback alias nama field
+        $fotoFile = $request->file('foto_laporan') ?? $request->file('foto') ?? $request->file('image');
+        $audioFile = $request->file('rekam_suara') ?? $request->file('audio') ?? $request->file('voice_note');
+
+        if ($fotoFile) {
+            $input['foto_laporan'] = $fotoFile;
+        }
+        if ($audioFile) {
+            $input['rekam_suara'] = $audioFile;
+        }
+
+        $validator = Validator::make($input, [
             'kategori_laporan'    => 'required|string|max:255',
             'lokasi_laporan'      => 'required|string|max:255',
             'latitude'            => 'nullable|numeric|between:-90,90',
@@ -103,21 +124,30 @@ class LaporanController extends Controller
         }
 
         // Combine deskripsi, pesan_cepat, & keterangan_tambahan
-        $finalDeskripsi = $request->input('deskripsi', '');
+        $finalDeskripsi = $input['deskripsi'] ?? '';
         if (empty($finalDeskripsi)) {
             $parts = [];
-            $pesanCepat = $request->input('pesan_cepat');
+            $pesanCepat = $input['pesan_cepat'] ?? null;
             if (is_array($pesanCepat)) {
                 $parts[] = implode('. ', $pesanCepat);
             } elseif (is_string($pesanCepat) && !empty($pesanCepat)) {
                 $parts[] = $pesanCepat;
             }
 
-            if ($request->filled('keterangan_tambahan')) {
-                $parts[] = $request->keterangan_tambahan;
+            if (!empty($input['keterangan_tambahan'])) {
+                $parts[] = $input['keterangan_tambahan'];
             }
 
             $finalDeskripsi = implode("\n\nCatatan Tambahan: ", $parts);
+        }
+
+        // Fallback jika hanya melampirkan media (audio / foto) tanpa teks manual
+        if (empty($finalDeskripsi)) {
+            if ($audioFile) {
+                $finalDeskripsi = 'Laporan pesan suara (voice note)';
+            } elseif ($fotoFile) {
+                $finalDeskripsi = 'Laporan dengan lampiran foto';
+            }
         }
 
         if (empty($finalDeskripsi)) {
@@ -128,25 +158,25 @@ class LaporanController extends Controller
         }
 
         $fotoPath = null;
-        if ($request->hasFile('foto_laporan')) {
-            $fotoPath = $request->file('foto_laporan')->store('laporan/foto', 'public');
+        if ($fotoFile) {
+            $fotoPath = $fotoFile->store('laporan/foto', 'public');
         }
 
         $audioPath = null;
-        if ($request->hasFile('rekam_suara')) {
-            $audioPath = $request->file('rekam_suara')->store('laporan/audio', 'public');
+        if ($audioFile) {
+            $audioPath = $audioFile->store('laporan/audio', 'public');
         }
 
-        $latitude = $request->input('latitude');
-        $longitude = $request->input('longitude');
+        $latitude = $input['latitude'] ?? null;
+        $longitude = $input['longitude'] ?? null;
 
         $laporan = Laporan::create([
             'id_pengguna'      => $request->user()->id,
             'id_relawan'       => null,
-            'lokasi_laporan'   => $request->lokasi_laporan,
+            'lokasi_laporan'   => $input['lokasi_laporan'],
             'latitude'         => $latitude,
             'longitude'        => $longitude,
-            'kategori_laporan' => $request->kategori_laporan,
+            'kategori_laporan' => $input['kategori_laporan'],
             'deskripsi'        => $finalDeskripsi,
             'foto_laporan'     => $fotoPath,
             'rekam_suara'      => $audioPath,
@@ -302,7 +332,7 @@ class LaporanController extends Controller
         }
 
         $request->validate([
-            'status' => 'required|in:belum ditangani,ditangani,selesai,aktif,proses',
+            'status' => 'required|in:belum ditangani,ditangani,selesai,aktif,proses,menunggu,pending',
         ]);
 
         $laporan = Laporan::find($id);
@@ -311,9 +341,9 @@ class LaporanController extends Controller
         }
 
         $targetStatus = match ($request->status) {
-            'aktif'  => 'belum ditangani',
-            'proses' => 'ditangani',
-            default  => $request->status,
+            'aktif', 'menunggu', 'pending' => 'belum ditangani',
+            'proses'                       => 'ditangani',
+            default                        => $request->status,
         };
         $laporan->status = $targetStatus;
         if (in_array($targetStatus, ['ditangani', 'proses']) && $user->role === 'relawan' && empty($laporan->id_relawan)) {
