@@ -405,4 +405,63 @@ class SOSEngineTest extends TestCase
         $responseNull->assertStatus(422)
             ->assertJsonValidationErrors(['latitude', 'longitude']);
     }
+
+    public function test_sos_update_status_to_batal_saves_batal_explicitly(): void
+    {
+        Event::fake([SOSUpdateStatus::class]);
+
+        $pengguna = $this->createPengguna();
+        $relawan = $this->createRelawan();
+
+        $sos = SOS::create([
+            'id_pengguna'     => $pengguna->id,
+            'id_relawan'      => $relawan->id,
+            'latitude'        => -7.7820,
+            'longitude'       => 110.3675,
+            'status_sos'      => 'ditangani',
+            'waktu_sos'       => now(),
+            'battery_level'   => 85,
+            'signal_strength' => '4G',
+        ]);
+
+        $response = $this->actingAs($relawan)
+            ->patchJson("/api/sos/{$sos->id}/status", [
+                'status_sos'   => 'batal',
+                'alasan_batal' => 'Salah pencet tombol darurat',
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.status_sos', 'batal')
+            ->assertJsonPath('data.alasan_batal', 'Salah pencet tombol darurat');
+
+        $this->assertEquals('batal', $sos->fresh()->status_sos);
+        $this->assertEquals('Salah pencet tombol darurat', $sos->fresh()->alasan_batal);
+    }
+
+    public function test_sos_update_status_cannot_be_completed_by_other_relawan(): void
+    {
+        $pengguna = $this->createPengguna();
+        $relawan1 = $this->createRelawan(['name' => 'Relawan 1']);
+        $relawan2 = $this->createRelawan(['name' => 'Relawan 2']);
+
+        $sos = SOS::create([
+            'id_pengguna'     => $pengguna->id,
+            'id_relawan'      => $relawan1->id,
+            'latitude'        => -7.7820,
+            'longitude'       => 110.3675,
+            'status_sos'      => 'ditangani',
+            'waktu_sos'       => now(),
+            'battery_level'   => 85,
+            'signal_strength' => '4G',
+        ]);
+
+        // Relawan 2 mencoba menyelesaikan SOS yang ditugaskan ke Relawan 1
+        $response = $this->actingAs($relawan2)
+            ->patchJson("/api/sos/{$sos->id}/status", [
+                'status_sos' => 'selesai',
+            ]);
+
+        $response->assertStatus(403);
+        $this->assertEquals('ditangani', $sos->fresh()->status_sos);
+    }
 }

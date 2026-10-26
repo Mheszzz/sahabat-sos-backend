@@ -10,7 +10,7 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 
 // Channel spesifik per-relawan (untuk penugasan SOS langsung ke 1 relawan)
 Broadcast::channel('relawan.{id}', function (User $user, $id) {
-    return $user->role === 'relawan';
+    return $user->role === 'relawan' && (int) $user->id === (int) $id;
 });
 
 // Channel umum semua relawan (untuk broadcast SOS ke semua relawan)

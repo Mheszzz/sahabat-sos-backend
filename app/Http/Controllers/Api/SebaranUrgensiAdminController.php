@@ -24,13 +24,13 @@ class SebaranUrgensiAdminController extends Controller
 
         // 1. Level Urgensi Kasus
         $kasusKritisAktif = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])->count();
-        $kasusSedangMenunggu = Laporan::whereIn('status', ['belum ditangani', 'menunggu', 'aktif'])->count();
-        $kasusSelesaiHariIni = SOS::where('status_sos', 'selesai')->whereDate('updated_at', $today)->count() 
+        $kasusSedangMenunggu = Laporan::whereIn('status', ['belum ditangani', 'menunggu', 'aktif', 'ditangani', 'proses'])->count();
+        $kasusSelesaiHariIni = SOS::where('status_sos', 'selesai')->whereDate('updated_at', $today)->count()
             + Laporan::where('status', 'selesai')->whereDate('updated_at', $today)->count();
 
         $totalSos = SOS::count();
         $totalResolved = SOS::where('status_sos', 'selesai')->count();
-        $tingkatKeberhasilan = $totalSos > 0 ? round(($totalResolved / $totalSos) * 100, 1) : 98.1;
+        $tingkatKeberhasilan = $totalSos > 0 ? round(($totalResolved / $totalSos) * 100, 1) : 100.0;
 
         $ringkasanUrgensi = [
             'level_kritis' => [

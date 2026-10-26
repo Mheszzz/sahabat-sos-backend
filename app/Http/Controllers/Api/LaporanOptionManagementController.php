@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\KategoriLaporan;
+use App\Models\Laporan;
 use App\Models\PesanCepat;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -32,6 +33,12 @@ class LaporanOptionManagementController extends Controller
         ]);
 
         $id = $request->id ? Str::slug($request->id, '_') : Str::slug($request->title, '_');
+
+        if (KategoriLaporan::where('id', $id)->exists()) {
+            return response()->json([
+                'message' => "Kategori dengan kode atau judul serupa ('{$id}') sudah terdaftar. Silakan gunakan judul lain."
+            ], 422);
+        }
 
         $kategori = KategoriLaporan::create([
             'id'        => $id,
@@ -78,9 +85,20 @@ class LaporanOptionManagementController extends Controller
             return response()->json(['message' => 'Kategori laporan tidak ditemukan'], 404);
         }
 
+        $hasLaporan = Laporan::where('kategori_laporan', $kategori->id)->exists();
+
+        if ($hasLaporan) {
+            $kategori->update(['is_active' => false]);
+
+            return response()->json([
+                'message'   => "Kategori '{$kategori->title}' telah digunakan dalam laporan riwayat kasus, sehingga dinonaktifkan alih-alih dihapus permanen untuk menjaga integritas data.",
+                'is_active' => false,
+            ]);
+        }
+
         $kategori->delete();
 
-        return response()->json(['message' => 'Kategori laporan berhasil dihapus']);
+        return response()->json(['message' => 'Kategori laporan berhasil dihapus permanen']);
     }
 
 

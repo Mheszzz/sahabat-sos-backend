@@ -9,6 +9,7 @@ use App\Models\Account;
 use App\Events\RelawanStatusUpdated;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class RelawanManagementController extends Controller
 {
@@ -21,9 +22,11 @@ class RelawanManagementController extends Controller
         $validated = $request->validate([
             'name'      => 'required|string|max:255',
             'email'     => 'required|email|max:255',
-            'no_telp'   => 'required|string|max:20',
+            'no_telp'   => 'required|string|max:20|unique:users,no_telp',
             'alamat'    => 'required|string|max:255',
             'pekerjaan' => 'nullable|string|max:255',
+        ], [
+            'no_telp.unique' => 'Nomor HP ini sudah terdaftar di sistem. Gunakan nomor HP lain.',
         ]);
 
         $email = strtolower(trim($validated['email']));
@@ -83,14 +86,37 @@ class RelawanManagementController extends Controller
     public function index(Request $request)
     {
         $perPage = (int) $request->query('per_page', 50);
-        $relawan = User::with('accounts')
-                ->where('role', 'relawan')
-                ->select('id', 'name', 'alamat', 'no_telp', 'foto_profile', 'is_active', 'status_verifikasi', 'pekerjaan', 'alasan_relawan', 'created_at')
+        $query = User::with('accounts')->where('role', 'relawan');
+
+        if ($request->filled('status_verifikasi')) {
+            $query->where('status_verifikasi', $request->status_verifikasi);
+        }
+
+        $columns = [
+            'id', 'name', 'alamat', 'no_telp', 'foto_profile',
+            'is_active', 'status_verifikasi', 'pekerjaan', 'alasan_relawan',
+            'created_at'
+        ];
+
+        if (Schema::hasColumn('users', 'dokumen_kyc')) {
+            $columns[] = 'dokumen_kyc';
+        }
+        if (Schema::hasColumn('users', 'alasan_penolakan')) {
+            $columns[] = 'alasan_penolakan';
+        }
+
+        $relawan = $query->select($columns)
                 ->latest()
                 ->paginate($perPage);
 
         $relawan->getCollection()->transform(function ($item) {
             $item->email = $item->accounts->first()?->email ?? '-';
+            if (!isset($item->dokumen_kyc)) {
+                $item->dokumen_kyc = null;
+            }
+            if (!isset($item->alasan_penolakan)) {
+                $item->alasan_penolakan = null;
+            }
             return $item;
         });
 

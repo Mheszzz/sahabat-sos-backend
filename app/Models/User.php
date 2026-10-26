@@ -41,7 +41,9 @@ class User extends Authenticatable
         'last_located_at',
         'pekerjaan',
         'alasan_relawan',
+        'dokumen_kyc',
         'status_verifikasi',
+        'alasan_penolakan',
         'persetujuan_privasi',
         'waktu_persetujuan',
         'permissions',
@@ -107,11 +109,28 @@ class User extends Authenticatable
     }
 
     /**
+     * Accessor untuk dokumen_kyc_url
+     */
+    public function getDokumenKycUrlAttribute(): ?string
+    {
+        if (!$this->dokumen_kyc) {
+            return null;
+        }
+
+        if (str_starts_with($this->dokumen_kyc, 'http://') || str_starts_with($this->dokumen_kyc, 'https://')) {
+            return $this->dokumen_kyc;
+        }
+
+        return url('storage/' . $this->dokumen_kyc);
+    }
+
+    /**
      * Scope query untuk mencari user/relawan terdekat berdasarkan latitude & longitude (Formula Haversine).
      */
     public function scopeNearby($query, float $latitude, float $longitude, float $radiusInKm = 5.0)
     {
-        $haversine = "(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude))))";
+        $earthRadius = (float) config('sos.earth_radius_km', 6371.0);
+        $haversine = "({$earthRadius} * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude))))";
 
         return $query->selectRaw("*, {$haversine} AS distance", [$latitude, $longitude, $latitude])
             ->whereNotNull('latitude')
@@ -223,5 +242,13 @@ class User extends Authenticatable
 
         $permissions = $this->permissions ?? [];
         return in_array($permission, $permissions);
+    }
+
+    /**
+     * Relasi ke Smartwatch yang dipasangkan oleh pengguna
+     */
+    public function smartwatches()
+    {
+        return $this->hasMany(UserSmartwatch::class, 'id_pengguna');
     }
 }

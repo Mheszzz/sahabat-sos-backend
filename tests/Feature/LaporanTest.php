@@ -385,4 +385,77 @@ class LaporanTest extends TestCase
 
         $response->assertStatus(403);
     }
+
+    public function test_relawan_assigned_can_complete_laporan()
+    {
+        $pengguna = $this->createPengguna();
+        $relawan = User::create([
+            'role'                => 'relawan',
+            'name'                => 'Relawan Bertugas',
+            'no_telp'             => '081234445555',
+            'is_active'           => true,
+            'status_verifikasi'   => 'terverifikasi',
+            'persetujuan_privasi' => true,
+        ]);
+
+        $laporan = Laporan::create([
+            'id_pengguna'      => $pengguna->id,
+            'id_relawan'       => $relawan->id,
+            'kategori_laporan' => 'Medis',
+            'lokasi_laporan'   => 'Jl. Kaliurang KM 5',
+            'deskripsi'        => 'Membutuhkan pertolongan pertama',
+            'status'           => 'ditangani',
+            'waktu_laporan'    => now(),
+        ]);
+
+        $response = $this->actingAs($relawan)
+            ->putJson("/api/laporan/{$laporan->id}/status", [
+                'status' => 'selesai',
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.status', 'selesai');
+
+        $this->assertEquals('selesai', $laporan->fresh()->status);
+    }
+
+    public function test_relawan_unassigned_cannot_complete_laporan()
+    {
+        $pengguna = $this->createPengguna();
+        $relawan1 = User::create([
+            'role'                => 'relawan',
+            'name'                => 'Relawan Utama',
+            'no_telp'             => '081234445556',
+            'is_active'           => true,
+            'status_verifikasi'   => 'terverifikasi',
+            'persetujuan_privasi' => true,
+        ]);
+        $relawanLain = User::create([
+            'role'                => 'relawan',
+            'name'                => 'Relawan Lain',
+            'no_telp'             => '081234445557',
+            'is_active'           => true,
+            'status_verifikasi'   => 'terverifikasi',
+            'persetujuan_privasi' => true,
+        ]);
+
+        $laporan = Laporan::create([
+            'id_pengguna'      => $pengguna->id,
+            'id_relawan'       => $relawan1->id,
+            'kategori_laporan' => 'Medis',
+            'lokasi_laporan'   => 'Jl. Kaliurang KM 5',
+            'deskripsi'        => 'Membutuhkan pertolongan pertama',
+            'status'           => 'ditangani',
+            'waktu_laporan'    => now(),
+        ]);
+
+        // Relawan lain mencoba menyelesaikan laporan yang dipegang Relawan Utama
+        $response = $this->actingAs($relawanLain)
+            ->putJson("/api/laporan/{$laporan->id}/status", [
+                'status' => 'selesai',
+            ]);
+
+        $response->assertStatus(403);
+        $this->assertEquals('ditangani', $laporan->fresh()->status);
+    }
 }

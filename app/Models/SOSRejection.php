@@ -14,6 +14,7 @@ class SOSRejection extends Model
     protected $fillable = [
         'id_sos',
         'id_relawan',
+        'alasan',
     ];
 
     /**

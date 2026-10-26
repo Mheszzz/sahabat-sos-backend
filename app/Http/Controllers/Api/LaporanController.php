@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Laporan;
+use App\Models\CatatanPenanganan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 
 class LaporanController extends Controller
 {
@@ -190,10 +192,9 @@ class LaporanController extends Controller
 
         if ($latitude !== null && $longitude !== null) {
             $nearbyVolunteers = \App\Models\User::where('role', 'relawan')
-                ->where(function ($q) {
-                    $q->whereNull('status_ketersediaan')
-                      ->orWhere('status_ketersediaan', 'tersedia');
-                })
+                ->where('status_verifikasi', 'terverifikasi')
+                ->where('is_active', true)
+                ->where('status_ketersediaan', 'tersedia')
                 ->nearby((float)$latitude, (float)$longitude, $radiusInKm)
                 ->get()
                 ->map(function ($vol) {
@@ -332,7 +333,10 @@ class LaporanController extends Controller
         }
 
         $request->validate([
-            'status' => 'required|in:belum ditangani,ditangani,selesai,aktif,proses,menunggu,pending',
+            'status'             => 'required|in:belum ditangani,ditangani,selesai,aktif,proses,menunggu,pending',
+            'catatan'            => 'nullable|string|max:1000',
+            'notes'              => 'nullable|string|max:1000',
+            'catatan_penanganan' => 'nullable|string|max:1000',
         ]);
 
         $laporan = Laporan::find($id);
@@ -345,13 +349,50 @@ class LaporanController extends Controller
             'proses'                       => 'ditangani',
             default                        => $request->status,
         };
-        $laporan->status = $targetStatus;
-        if (in_array($targetStatus, ['ditangani', 'proses']) && $user->role === 'relawan' && empty($laporan->id_relawan)) {
-            $laporan->id_relawan = $user->id;
+
+        // Validasi: Relawan hanya bisa menyelesaikan laporan jika relawan tersebut yang mengambil/bertugas
+        if ($targetStatus === 'selesai' && $user->role === 'relawan') {
+            if (empty($laporan->id_relawan) || (int) $laporan->id_relawan !== (int) $user->id) {
+                return response()->json([
+                    'message' => 'Anda tidak memiliki hak untuk menyelesaikan laporan ini. Hanya relawan yang bertugas yang dapat menyelesaikan laporan.'
+                ], 403);
+            }
         }
+
+        if (in_array($targetStatus, ['ditangani', 'proses']) && $user->role === 'relawan') {
+            if (!empty($laporan->id_relawan) && (int) $laporan->id_relawan !== (int) $user->id) {
+                return response()->json([
+                    'message' => 'Laporan ini sudah diambil oleh relawan lain.'
+                ], 400);
+            }
+            if (empty($laporan->id_relawan)) {
+                $laporan->id_relawan = $user->id;
+            }
+        }
+
+        $laporan->status = $targetStatus;
         $laporan->save();
 
-        $laporan->load(['pengguna', 'relawan']);
+        if ($targetStatus === 'selesai') {
+            $catatanText = $request->input('catatan') ?? $request->input('notes') ?? $request->input('catatan_penanganan');
+            if (!empty($catatanText)) {
+                CatatanPenanganan::create([
+                    'id_admin'   => $user->id,
+                    'id_laporan' => $laporan->id,
+                    'id_sos'     => null,
+                    'catatan'    => $catatanText,
+                ]);
+            }
+
+            if ($user->role === 'relawan') {
+                $user->update(['status_ketersediaan' => 'tersedia']);
+            }
+
+            Cache::forget("laporan:{$laporan->id}:polyline");
+            Cache::forget("laporan:{$laporan->id}:last_reroute");
+        }
+
+        $laporan->load(['pengguna', 'relawan', 'catatanPenanganan.admin']);
 
         return response()->json([
             'message' => 'Status laporan berhasil diperbarui',

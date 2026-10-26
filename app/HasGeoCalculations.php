@@ -6,7 +6,7 @@ trait HasGeoCalculations
 {
     public function calculateDistance($lat1, $lon1, $lat2, $lon2): float
     {
-        $earthRadius = 6371000; // Radius bumi dalam meter
+        $earthRadius = (float) config('sos.earth_radius_m', 6371000.0); // Radius bumi dalam meter
 
         $latFrom = deg2rad((float) $lat1);
         $lonFrom = deg2rad((float) $lon1);

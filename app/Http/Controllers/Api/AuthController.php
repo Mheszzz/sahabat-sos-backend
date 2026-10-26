@@ -120,11 +120,12 @@ class AuthController extends Controller
                 } else {
                     // 3. Buat User baru jika belum terdaftar sama sekali
                     $user = User::create([
-                        'name'              => $googleName ?? 'User Google',
-                        'foto_profile'      => $googleAvatar,
-                        'role'              => $requestedRole,
-                        'status_verifikasi' => $requestedRole === 'relawan' ? 'pending' : 'terverifikasi',
-                        'is_active'         => true,
+                        'name'                => $googleName ?? 'User Google',
+                        'foto_profile'        => $googleAvatar,
+                        'role'                => $requestedRole,
+                        'status_verifikasi'   => $requestedRole === 'relawan' ? 'pending' : 'terverifikasi',
+                        'status_ketersediaan' => $requestedRole === 'relawan' ? 'off' : null,
+                        'is_active'           => true,
                     ]);
 
                     // 4. Tautkan Akun Google ke tabel accounts
@@ -209,11 +210,22 @@ class AuthController extends Controller
             'status_ketersediaan' => 'nullable|string',
             'device_id'           => 'nullable|string',
             'lokasi_user'         => 'nullable|string',
+            'dokumen_kyc'         => 'nullable',
         ]);
+
+        if ($request->hasFile('dokumen_kyc')) {
+            $path = $request->file('dokumen_kyc')->store('kyc_documents', 'public');
+            $validated['dokumen_kyc'] = $path;
+        } elseif ($request->filled('dokumen_kyc') && is_string($request->dokumen_kyc)) {
+            $validated['dokumen_kyc'] = $request->dokumen_kyc;
+        }
 
         $targetRole = $validated['role'] ?? $user->role;
         if ($targetRole === 'relawan' && ($user->role !== 'relawan' || $user->status_verifikasi !== 'terverifikasi')) {
             $validated['status_verifikasi'] = 'pending';
+            if (isset($validated['status_ketersediaan']) && $validated['status_ketersediaan'] === 'tersedia') {
+                $validated['status_ketersediaan'] = 'off';
+            }
         }
 
         $user->update($validated);
@@ -257,8 +269,17 @@ class AuthController extends Controller
             ], 401);
         }
 
+        if (!$user->is_active) {
+            return response()->json([
+                'message' => 'Akun administrator Anda telah dinonaktifkan. Silakan hubungi Superadmin.'
+            ], 403);
+        }
+
         // Generate Sanctum Token
         $token = $user->createToken('admin_auth_token')->plainTextToken;
+
+        // Lampirkan email untuk response frontend & session
+        $user->email = $account->email;
 
         return response()->json([
             'message'      => 'Login Admin berhasil',
@@ -350,9 +371,12 @@ class AuthController extends Controller
                     }
                 } else {
                     $user = User::create([
-                        'name'         => $googleUser->getName(),
-                        'foto_profile' => $googleUser->getAvatar(),
-                        'role'         => $requestedRole,
+                        'name'                => $googleUser->getName(),
+                        'foto_profile'        => $googleUser->getAvatar(),
+                        'role'                => $requestedRole,
+                        'status_verifikasi'   => $requestedRole === 'relawan' ? 'pending' : 'terverifikasi',
+                        'status_ketersediaan' => $requestedRole === 'relawan' ? 'off' : null,
+                        'is_active'           => true,
                     ]);
                 }
 
@@ -404,6 +428,7 @@ class AuthController extends Controller
             'alamat'              => ($isRelawan ? 'required' : 'nullable') . '|string|max:255',
             'pekerjaan'           => ($isRelawan ? 'required' : 'nullable') . '|string|max:255',
             'alasan_relawan'      => ($isRelawan ? 'required' : 'nullable') . '|string|max:1000',
+            'dokumen_kyc'         => 'nullable',
         ], [
             'persetujuan_privasi.required' => 'Anda harus menyetujui syarat & ketentuan penggunaan data pribadi dan medis untuk mendaftar.',
             'persetujuan_privasi.accepted' => 'Anda harus menyetujui syarat & ketentuan penggunaan data pribadi dan medis untuk mendaftar.',
@@ -425,6 +450,13 @@ class AuthController extends Controller
         try {
             DB::beginTransaction();
 
+            $dokumenKyc = null;
+            if ($request->hasFile('dokumen_kyc')) {
+                $dokumenKyc = $request->file('dokumen_kyc')->store('kyc_documents', 'public');
+            } elseif ($request->filled('dokumen_kyc') && is_string($request->dokumen_kyc)) {
+                $dokumenKyc = $request->dokumen_kyc;
+            }
+
             $user = User::create([
                 'name'                => $request->name,
                 'role'                => $request->role,
@@ -432,8 +464,9 @@ class AuthController extends Controller
                 'alamat'              => $request->alamat ?? null,
                 'pekerjaan'           => $request->pekerjaan ?? null,
                 'alasan_relawan'      => $request->alasan_relawan ?? null,
+                'dokumen_kyc'         => $dokumenKyc,
                 'status_verifikasi'   => $request->role === 'relawan' ? 'pending' : 'terverifikasi',
-                'status_ketersediaan' => $request->role === 'relawan' ? 'tersedia' : null,
+                'status_ketersediaan' => $request->role === 'relawan' ? 'off' : null,
                 'persetujuan_privasi' => true,
                 'waktu_persetujuan'   => now(),
             ]);
@@ -593,13 +626,22 @@ class AuthController extends Controller
         ]);
 
         $user = $request->user();
-        $user->update([
-            'latitude'            => $validated['latitude'],
-            'longitude'           => $validated['longitude'],
-            'lokasi_user'         => $validated['lokasi_user'] ?? $user->lokasi_user,
-            'status_ketersediaan' => $validated['status_ketersediaan'] ?? $user->status_ketersediaan,
-            'last_located_at'     => now(),
-        ]);
+
+        $updateData = [
+            'latitude'        => $validated['latitude'],
+            'longitude'       => $validated['longitude'],
+            'lokasi_user'     => $validated['lokasi_user'] ?? $user->lokasi_user,
+            'last_located_at' => now(),
+        ];
+
+        // Parameter 'status_ketersediaan' hanya diizinkan jika user role relawan dan sudah terverifikasi
+        if (isset($validated['status_ketersediaan'])) {
+            if ($user->role === 'relawan' && $user->status_verifikasi === 'terverifikasi') {
+                $updateData['status_ketersediaan'] = $validated['status_ketersediaan'];
+            }
+        }
+
+        $user->update($updateData);
 
         return response()->json([
             'message' => 'Lokasi GPS berhasil diperbarui',
@@ -637,6 +679,7 @@ class AuthController extends Controller
     {
         $request->validate([
             'status_verifikasi' => 'required|in:terverifikasi,ditolak',
+            'alasan_penolakan'  => 'nullable|string|max:1000',
         ]);
 
         $relawan = User::with('accounts')->where('role', 'relawan')->find($id);
@@ -650,8 +693,10 @@ class AuthController extends Controller
 
         if ($request->status_verifikasi === 'terverifikasi') {
             $updateData['is_active'] = true;
+            $updateData['alasan_penolakan'] = null;
         } elseif ($request->status_verifikasi === 'ditolak') {
             $updateData['is_active'] = false;
+            $updateData['alasan_penolakan'] = $request->alasan_penolakan ?? 'Berkas pendaftaran atau kualifikasi relawan belum memenuhi persyaratan.';
         }
 
         $relawan->update($updateData);

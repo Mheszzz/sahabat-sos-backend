@@ -34,11 +34,17 @@ class LaporanCreated implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        return [
+        $channels = [
             new Channel('command-center'),
             new Channel('laporan-channel'),
             new PrivateChannel('relawan-channel'),
         ];
+
+        if ($this->laporan->id_relawan) {
+            $channels[] = new PrivateChannel('relawan.' . $this->laporan->id_relawan);
+        }
+
+        return $channels;
     }
 
     /**
@@ -58,6 +64,8 @@ class LaporanCreated implements ShouldBroadcastNow
             'id'                       => $this->laporan->id,
             'id_kasus'                 => $this->laporan->id_kasus,
             'nomor_kasus'              => $this->laporan->nomor_kasus,
+            'status'                   => $this->laporan->status,
+            'id_relawan'               => $this->laporan->id_relawan,
             'kategori_laporan'         => $this->laporan->kategori_laporan,
             'lokasi_laporan'           => $this->laporan->lokasi_laporan,
             'latitude'                 => $this->laporan->latitude,

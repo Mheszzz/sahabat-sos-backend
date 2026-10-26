@@ -11,6 +11,7 @@ use App\Models\KategoriLaporan;
 use App\Models\User;
 use App\Models\SOSActivity;
 use App\Events\SOSUpdateStatus;
+use App\Events\LaporanCreated;
 use App\Http\Controllers\Api\HubungiWhatsAppController;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -391,6 +392,12 @@ class KasusAktifController extends Controller
                 'id_relawan' => $relawan->id,
                 'status'     => 'ditangani',
             ]);
+
+            try {
+                broadcast(new \App\Events\LaporanCreated($laporan));
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Gagal broadcast LaporanCreated pada KasusAktifController::dispatch: " . $e->getMessage());
+            }
 
             return response()->json([
                 'message' => "Relawan {$relawan->name} berhasil ditugaskan ke Laporan #{$laporan->id}",

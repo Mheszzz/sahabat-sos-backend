@@ -16,6 +16,7 @@ use App\Services\MapboxService;
 use App\HasGeoCalculations;
 use Illuminate\Support\Facades\Cache;
 use App\Models\Laporan;
+use App\Models\CatatanPenanganan;
 use App\Http\Controllers\Api\KasusAktifController;
 
 class SOSController extends Controller
@@ -23,6 +24,30 @@ class SOSController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
+        $userId = $user ? $user->id : null;
+
+        // 1. Cek prioritas: Jika pengguna sudah punya SOS aktif, segera kembalikan data kasus aktif
+        if ($userId) {
+            $activeSos = SOS::where('id_pengguna', $userId)
+                ->whereIn('status_sos', ['belum ditangani', 'ditangani'])
+                ->first();
+
+            if ($activeSos) {
+                return response()->json([
+                    'message' => 'Anda masih memiliki sinyal SOS aktif yang sedang diproses.',
+                    'data'    => $activeSos,
+                ], 422);
+            }
+        }
+
+        // 2. Sanitasi level baterai agar kegagalan sensor (misal -1) tidak pernah membatalkan panggilan darurat
+        if ($request->has('battery_level')) {
+            $battery = $request->input('battery_level');
+            if ($battery !== null && (!is_numeric($battery) || (int) $battery < 0 || (int) $battery > 100)) {
+                $request->merge(['battery_level' => null]);
+            }
+        }
+
         $latInput = $request->input('latitude');
         $lngInput = $request->input('longitude');
 
@@ -122,19 +147,6 @@ class SOSController extends Controller
         $lat = (float) $request->latitude;
         $lng = (float) $request->longitude;
 
-        $userId = $request->user()->id;
-
-        // Cek apakah pengguna sudah punya laporan SOS yang masih aktif
-        $activeSos = SOS::where('id_pengguna', $userId)
-            ->whereIn('status_sos', ['belum ditangani', 'ditangani'])
-            ->first();
-
-        if ($activeSos) {
-            return response()->json([
-                'message' => 'Anda masih memiliki sinyal SOS aktif yang sedang diproses.'
-            ], 422);
-        }
-
         // Siapkan device_info
         $deviceInfo = $request->device_info;
         if (is_string($deviceInfo)) {
@@ -161,6 +173,9 @@ class SOSController extends Controller
 
         $batteryLevel = $request->battery_level
             ?? ($deviceInfo['mobile']['battery_level'] ?? ($deviceInfo['battery_level'] ?? 85));
+        if (!is_numeric($batteryLevel) || (int) $batteryLevel < 0 || (int) $batteryLevel > 100) {
+            $batteryLevel = 85;
+        }
 
         $signalStrength = $request->signal_strength
             ?? ($deviceInfo['mobile']['signal_strength'] ?? ($deviceInfo['signal_strength'] ?? '4G'));
@@ -177,11 +192,27 @@ class SOSController extends Controller
             'device_info'     => $deviceInfo,
         ]);
 
+        // Siapkan deskripsi aktivitas berdasarkan sumber pemicu
+        $activityDesc = "Sinyal darurat SOS diaktifkan oleh {$request->user()->name}" . ($isFallback ? " (Menggunakan lokasi {$fallbackLabel})" : "");
+        $triggerSrc = $sos->device_info['trigger_source'] ?? 'app_button';
+        if ($triggerSrc === 'tuya_physical_button') {
+            $activityDesc = "Sinyal darurat SOS diaktifkan melalui Tombol Fisik Darurat Tuya" . ($isFallback ? " (Lokasi: {$fallbackLabel})" : "");
+        } elseif (in_array($triggerSrc, ['smartwatch_button', 'smartwatch_fall_detection'])) {
+            $watchModel = $sos->device_info['smartwatch']['device_model'] ?? 'Smartwatch';
+            $bpm = $sos->device_info['smartwatch']['heart_rate'] ?? null;
+            $bpmText = $bpm ? " (Detak jantung: {$bpm} BPM)" : '';
+            if ($triggerSrc === 'smartwatch_fall_detection') {
+                $activityDesc = "Sinyal darurat SOS dipicu otomatis oleh Deteksi Jatuh pada {$watchModel}{$bpmText}" . ($isFallback ? " (Lokasi: {$fallbackLabel})" : "");
+            } else {
+                $activityDesc = "Sinyal darurat SOS diaktifkan melalui Tombol Darurat pada {$watchModel}{$bpmText}" . ($isFallback ? " (Lokasi: {$fallbackLabel})" : "");
+            }
+        }
+
         // Catat log aktivitas awal
         SOSActivity::record(
             $sos->id,
             'sos_dipicu',
-            "Sinyal darurat SOS diaktifkan oleh {$request->user()->name}" . ($isFallback ? " (Menggunakan lokasi {$fallbackLabel})" : ""),
+            $activityDesc,
             $userId,
             [
                 'latitude'        => $lat,
@@ -190,6 +221,7 @@ class SOSController extends Controller
                 'fallback_source' => $fallbackSource,
                 'battery_level'   => $sos->battery_level,
                 'signal'          => $sos->signal_strength,
+                'trigger_source'  => $triggerSrc,
             ]
         );
 
@@ -212,33 +244,39 @@ class SOSController extends Controller
             );
         }
 
-        // 1. Tahap 1: Broadcast ke semua relawan tersedia dalam radius 2 km
+        // 1. Tahap 1: Broadcast ke semua relawan tersedia dalam radius awal (default 2 km)
+        $initialRadius = (float) config('sos.initial_radius', 2.0);
+        $escalationDelay = (int) config('sos.escalation_delay_seconds', 30);
+
         $volunteers2km = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
+            ->where('is_active', true)
             ->where('status_ketersediaan', 'tersedia')
-            ->nearby($lat, $lng, 2.0)
+            ->nearby($lat, $lng, $initialRadius)
             ->get();
 
         $volunteerIds = $volunteers2km->pluck('id')->toArray();
 
-        Log::info("SOS ID {$sos->id}: Memulai broadcast tahap 1 (radius 2 km). Ditemukan {$volunteers2km->count()} relawan tersedia.");
+        Log::info("SOS ID {$sos->id}: Memulai broadcast tahap 1 (radius {$initialRadius} km). Ditemukan {$volunteers2km->count()} relawan tersedia.");
 
         if ($volunteers2km->isNotEmpty()) {
             try {
-                broadcast(new SOSCreated($sos, $volunteerIds, 2.0));
+                broadcast(new SOSCreated($sos, $volunteerIds, $initialRadius));
             } catch (\Throwable $e) {
                 Log::warning("Gagal broadcast SOSCreated pada store: " . $e->getMessage());
             }
         } else {
-            Log::info("SOS ID {$sos->id}: Belum ada relawan tersedia dalam radius 2 km. Melakukan broadcast darurat ke seluruh relawan.");
+            Log::info("SOS ID {$sos->id}: Belum ada relawan tersedia dalam radius {$initialRadius} km. Menyiarkan ke Posko Command Center dan menunggu eskalasi bertingkat ke 3.0 km.");
             try {
-                broadcast(new SOSCreated($sos, null, 2.0));
+                // Sinyal SOS tetap dipancarkan ke Posko Command Center, tanpa memicu broadcast umum ke relawan
+                broadcast(new SOSCreated($sos, [], $initialRadius));
             } catch (\Throwable $e) {
-                Log::warning("Gagal broadcast darurat SOSCreated pada store: " . $e->getMessage());
+                Log::warning("Gagal broadcast awal SOSCreated ke Command Center pada store: " . $e->getMessage());
             }
         }
 
-        // 2. Tahap 2: Tunggu 30 detik, jika belum ada yang menerima, eskalasi bertingkat ke radius 3 km
-        EscalateSOSJob::dispatch($sos->id, 3.0)->delay(now()->addSeconds(30));
+        // 2. Tahap 2: Tunggu jeda eskalasi (default 30 detik), jika belum ada yang menerima, eskalasi bertingkat ke radius 3 km
+        EscalateSOSJob::dispatch($sos->id, 3.0)->delay(now()->addSeconds($escalationDelay));
 
         return response()->json([
             'message' => 'Sinyal SOS berhasil dikirim.',
@@ -339,15 +377,21 @@ class SOSController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $request->validate([
-            'status_sos' => 'required|in:belum ditangani,ditangani,selesai,batal',
+            'status_sos'         => 'required|in:belum ditangani,ditangani,selesai,batal',
+            'alasan_batal'       => 'nullable|string|max:255',
+            'alasan'             => 'nullable|string|max:255',
+            'reason'             => 'nullable|string|max:255',
+            'catatan'            => 'nullable|string|max:1000',
+            'notes'              => 'nullable|string|max:1000',
+            'catatan_penanganan' => 'nullable|string|max:1000',
         ]);
 
         $user = $request->user();
         $userId = $user->id;
 
-        // Jika relawan ingin mengambil tugas (ubah status ke 'ditangani')
+        // 1. Cabang: Relawan mengambil tugas (ubah status ke 'ditangani')
         if ($request->status_sos === 'ditangani') {
-            
+
             // Baris yang masih 'belum ditangani', 'aktif', atau SUDAH ditugaskan ke relawan ini
             $updated = SOS::where('id', $id)
                 ->where(function ($q) use ($userId) {
@@ -363,8 +407,21 @@ class SOSController extends Controller
                     'updated_at' => now(),
                 ]);
 
-            // Jika tidak ada baris yang ter-update, berarti SOS sudah diambil oleh relawan lain
+            // Jika tidak ada baris yang ter-update, periksa status riil kasus
             if (!$updated) {
+                $currentSos = SOS::find($id);
+                if ($currentSos) {
+                    if ($currentSos->status_sos === 'batal') {
+                        return response()->json([
+                            'message' => 'Sinyal SOS telah dibatalkan oleh pengguna.'
+                        ], 400);
+                    }
+                    if ($currentSos->status_sos === 'selesai') {
+                        return response()->json([
+                            'message' => 'Sinyal SOS telah selesai ditangani.'
+                        ], 400);
+                    }
+                }
                 return response()->json([
                     'message' => 'SOS ini sudah diambil oleh relawan lain.'
                 ], 400);
@@ -380,31 +437,120 @@ class SOSController extends Controller
                 $userId
             );
 
-        } else {
-            // Jika statusnya diubah ke 'selesai'
-            $sos = SOS::where('id', $id)
-                ->where('id_relawan', $userId) // Pastikan hanya relawan penanggung jawab yang bisa menyelesaikan
-                ->where('status_sos', 'ditangani')
-                ->first();
+        // 2. Cabang: Menyelesaikan tugas SOS (status 'selesai')
+        } elseif ($request->status_sos === 'selesai') {
+            $sos = SOS::find($id);
 
             if (!$sos) {
+                return response()->json([
+                    'message' => 'Sinyal SOS tidak ditemukan.'
+                ], 404);
+            }
+
+            // Pastikan relawan penanggung jawab (atau admin/superadmin) yang bisa menyelesaikan
+            $isAuthorized = ($sos->id_relawan == $userId) || in_array($user->role, ['admin', 'superadmin']);
+            if (!$isAuthorized) {
                 return response()->json([
                     'message' => 'Anda tidak memiliki hak untuk menyelesaikan SOS ini atau status SOS tidak valid.'
                 ], 403);
             }
+
+            if (!in_array($sos->status_sos, ['ditangani', 'proses'])) {
+                return response()->json([
+                    'message' => 'Status SOS tidak valid untuk diselesaikan (status saat ini: ' . $sos->status_sos . ').'
+                ], 400);
+            }
+
             $sos->status_sos = 'selesai';
             $sos->save();
+
+            // Simpan Catatan Medis / Tindakan Lapangan jika disertakan
+            $catatanText = $request->input('catatan') ?? $request->input('notes') ?? $request->input('catatan_penanganan');
+            if (!empty($catatanText)) {
+                CatatanPenanganan::create([
+                    'id_admin'   => $userId,
+                    'id_sos'     => $sos->id,
+                    'id_laporan' => null,
+                    'catatan'    => $catatanText,
+                ]);
+            }
+
+            $catatanDeskripsi = $catatanText ? " (Catatan Lapangan/Medis: {$catatanText})" : "";
 
             SOSActivity::record(
                 $sos->id,
                 'sos_selesai',
-                "Kasus SOS berhasil diselesaikan oleh relawan {$user->name}",
-                $userId
+                "Kasus SOS berhasil diselesaikan oleh relawan {$user->name}{$catatanDeskripsi}",
+                $userId,
+                $catatanText ? ['catatan' => $catatanText] : null
             );
+
+            // Kembalikan status ketersediaan relawan menjadi 'tersedia'
+            if ($user->role === 'relawan') {
+                $user->update(['status_ketersediaan' => 'tersedia']);
+            }
+
+            // Bersihkan cache rute & cooldown reroute polyline
+            Cache::forget("sos:{$sos->id}:polyline");
+            Cache::forget("sos:{$sos->id}:last_reroute");
+
+        // 3. Cabang: Membatalkan sinyal/tugas SOS (status 'batal')
+        } elseif ($request->status_sos === 'batal') {
+            $sos = SOS::find($id);
+
+            if (!$sos) {
+                return response()->json([
+                    'message' => 'Sinyal SOS tidak ditemukan.'
+                ], 404);
+            }
+
+            // Pengguna pemilik sinyal SOS, relawan penanggung jawab, atau admin/superadmin berhak membatalkan
+            $canCancel = ($sos->id_pengguna == $userId) ||
+                         ($sos->id_relawan == $userId) ||
+                         in_array($user->role, ['admin', 'superadmin']);
+
+            if (!$canCancel) {
+                return response()->json([
+                    'message' => 'Anda tidak memiliki hak untuk membatalkan sinyal SOS ini.'
+                ], 403);
+            }
+
+            if (in_array($sos->status_sos, ['selesai', 'batal'])) {
+                return response()->json([
+                    'message' => 'Sinyal SOS sudah berstatus ' . $sos->status_sos . ' dan tidak dapat dibatalkan.'
+                ], 400);
+            }
+
+            $alasan = $request->input('alasan_batal') ?? $request->input('alasan') ?? $request->input('reason');
+            $sos->status_sos = 'batal';
+            $sos->alasan_batal = $alasan;
+            $sos->save();
+
+            SOSActivity::record(
+                $sos->id,
+                'sos_dibatalkan',
+                "Sinyal SOS dibatalkan oleh {$user->name}" . ($sos->alasan_batal ? " (Alasan: {$sos->alasan_batal})" : ''),
+                $userId,
+                ['alasan_batal' => $sos->alasan_batal]
+            );
+
+            // Kembalikan status relawan menjadi tersedia jika ada relawan yang ditugaskan
+            if ($sos->id_relawan) {
+                User::where('id', $sos->id_relawan)->where('role', 'relawan')->update(['status_ketersediaan' => 'tersedia']);
+            }
+
+            // Bersihkan cache rute
+            Cache::forget("sos:{$sos->id}:polyline");
+            Cache::forget("sos:{$sos->id}:last_reroute");
+
+        } else {
+            return response()->json([
+                'message' => 'Perubahan status SOS ke \'' . $request->status_sos . '\' tidak didukung.'
+            ], 422);
         }
 
         // Refresh relasi agar data pelapor & relawan dimuat
-        $sos->load(['pengguna', 'relawan', 'activities.user']);
+        $sos->load(['pengguna', 'relawan', 'activities.user', 'catatanPenanganan.admin']);
 
         // Broadcast update ke Reverb (WebSocket)
         try {
@@ -443,6 +589,11 @@ class SOSController extends Controller
             ->latest('updated_at')
             ->first();
 
+        // 1. Ambil lokasi relawan dari Redis (Fallback: DB)
+        $relawanLocation = Cache::get("relawan:{$user->id}:location");
+        $relawanLat = $relawanLocation['latitude'] ?? $user->latitude;
+        $relawanLng = $relawanLocation['longitude'] ?? $user->longitude;
+
         if (!$sos) {
             // Fallback: cek apakah ada tugas laporan aktif yang sedang ditangani relawan ini
             $laporan = Laporan::with(['pengguna', 'relawan'])
@@ -452,7 +603,26 @@ class SOSController extends Controller
                 ->first();
 
             if ($laporan) {
+                $routeData = null;
+                if ($relawanLat && $relawanLng && $laporan->latitude && $laporan->longitude) {
+                    $routeData = $mapboxService->getRoute(
+                        (float) $relawanLat,
+                        (float) $relawanLng,
+                        (float) $laporan->latitude,
+                        (float) $laporan->longitude
+                    );
+
+                    if ($routeData && isset($routeData['polyline'])) {
+                        Cache::put("laporan:{$laporan->id}:polyline", $routeData['polyline'], 3600);
+                    }
+                }
+
                 $laporanData = KasusAktifController::transformItem($laporan, 'laporan', true);
+                $laporanData['route_info'] = $routeData;
+                $laporanData['polyline'] = $routeData['polyline'] ?? null;
+                $laporanData['duration_formatted'] = $routeData['duration_formatted'] ?? null;
+                $laporanData['distance_formatted'] = $routeData['distance_formatted'] ?? null;
+
                 return response()->json([
                     'message' => 'Tugas laporan aktif.',
                     'data'    => $laporanData,
@@ -465,12 +635,7 @@ class SOSController extends Controller
             ]);
         }
 
-        // 1. Ambil lokasi relawan dari Redis (Fallback: DB)
-        $relawanLocation = Cache::get("relawan:{$user->id}:location");
-        $relawanLat = $relawanLocation['latitude'] ?? $user->latitude;
-        $relawanLng = $relawanLocation['longitude'] ?? $user->longitude;
-
-        // 2. Minta rute jalan dari Mapbox
+        // 2. Minta rute jalan dari Mapbox / OSRM
         $routeData = null;
         if ($relawanLat && $relawanLng && $sos->latitude && $sos->longitude) {
             $routeData = $mapboxService->getRoute(
@@ -488,6 +653,9 @@ class SOSController extends Controller
 
         $data = $sos->toArray();
         $data['route_info'] = $routeData;
+        $data['polyline'] = $routeData['polyline'] ?? null;
+        $data['duration_formatted'] = $routeData['duration_formatted'] ?? null;
+        $data['distance_formatted'] = $routeData['distance_formatted'] ?? null;
 
         return response()->json([
             'data' => $data
@@ -548,6 +716,15 @@ class SOSController extends Controller
 
         $sos->load(['pengguna', 'relawan']);
 
+        // Kembalikan status relawan menjadi tersedia jika ada relawan yang ditugaskan
+        if ($sos->id_relawan) {
+            User::where('id', $sos->id_relawan)->where('role', 'relawan')->update(['status_ketersediaan' => 'tersedia']);
+        }
+
+        // Bersihkan cache rute
+        Cache::forget("sos:{$sos->id}:polyline");
+        Cache::forget("sos:{$sos->id}:last_reroute");
+
         try {
             broadcast(new SOSUpdateStatus($sos));
         } catch (\Throwable $e) {
@@ -563,6 +740,11 @@ class SOSController extends Controller
     // relawan menolak SOS yang ditawarkan, memunculkan sos baru yang aktif untuk relawan tersebut
     public function rejectSOS(Request $request, $id)
     {
+        $request->validate([
+            'alasan' => 'nullable|string|max:255',
+        ]);
+        $alasan = $request->input('alasan');
+
         $user = $request->user();
         $userId = $user->id;
 
@@ -577,22 +759,47 @@ class SOSController extends Controller
             ], 400);
         }
 
-        // 1. Simpan penolakan ke database
-        SOSRejection::firstOrCreate([
-            'id_sos'     => $sos->id,
-            'id_relawan' => $userId,
-        ]);
+        // 1. Simpan penolakan ke database beserta alasan
+        $rejection = SOSRejection::firstOrCreate(
+            [
+                'id_sos'     => $sos->id,
+                'id_relawan' => $userId,
+            ],
+            [
+                'alasan'     => $alasan,
+            ]
+        );
+        if ($alasan && $rejection->alasan !== $alasan) {
+            $rejection->update(['alasan' => $alasan]);
+        }
 
-        // Catat aktivitas penolakan
+        // Catat aktivitas penolakan dengan alasan
+        $activityText = "Relawan {$user->name} menolak / melewati panggilan SOS ini" . ($alasan ? " (Alasan: {$alasan})" : '');
         SOSActivity::record(
             $sos->id,
             'relawan_menolak',
-            "Relawan {$user->name} menolak / melewati panggilan SOS ini",
-            $userId
+            $activityText,
+            $userId,
+            ['alasan' => $alasan]
         );
 
-        // 2. Eskalasi otomatis ke radius 3km
-        EscalateSOSJob::dispatchSync($sos->id);
+        // 2. Broadcast ulang ke relawan lain yang tersedia dalam radius 3 km tanpa menduplikasi antrean job delayed
+        $rejectedRelawanIds = SOSRejection::where('id_sos', $sos->id)->pluck('id_relawan')->toArray();
+        $otherVolunteers = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
+            ->where('is_active', true)
+            ->where('status_ketersediaan', 'tersedia')
+            ->nearby((float) $sos->latitude, (float) $sos->longitude, 3.0)
+            ->whereNotIn('id', $rejectedRelawanIds)
+            ->get();
+
+        if ($otherVolunteers->isNotEmpty()) {
+            try {
+                broadcast(new SOSCreated($sos, $otherVolunteers->pluck('id')->toArray(), 3.0));
+            } catch (\Throwable $e) {
+                Log::warning("Gagal broadcast ulang SOSCreated saat penolakan: " . $e->getMessage());
+            }
+        }
 
         // 3. Panggil ulang fungsi pencarian SOS aktif untuk relawan ini
         $nextSosData = $this->getActiveRelawanSOS($request)->getData()->data;
