@@ -51,12 +51,14 @@ class AdminProfileController extends Controller
             'name'         => 'sometimes|required|string|max:255',
             'no_telp'      => 'nullable|string|max:20|unique:users,no_telp,' . $user->id,
             'alamat'       => 'nullable|string|max:255',
-            'foto_profile' => 'nullable|file|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'foto_profile' => 'nullable|file|image|mimes:jpeg,png,jpg,webp|max:5120|dimensions:max_width=4096,max_height=4096',
         ], [
-            'name.required'      => 'Nama tidak boleh kosong.',
-            'no_telp.unique'     => 'Nomor telepon sudah digunakan oleh akun lain.',
-            'foto_profile.image' => 'File foto profil harus berupa gambar.',
-            'foto_profile.max'   => 'Ukuran foto profil maksimal 5MB.',
+            'name.required'           => 'Nama tidak boleh kosong.',
+            'no_telp.unique'          => 'Nomor telepon sudah digunakan oleh akun lain.',
+            'foto_profile.image'      => 'File foto profil harus berupa gambar yang valid.',
+            'foto_profile.mimes'      => 'Format foto profil harus berupa JPEG, PNG, JPG, atau WEBP.',
+            'foto_profile.max'        => 'Ukuran foto profil maksimal 5MB.',
+            'foto_profile.dimensions' => 'Dimensi foto profil maksimal 4096 x 4096 piksel.',
         ]);
 
         if ($validator->fails()) {

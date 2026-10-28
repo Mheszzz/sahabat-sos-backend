@@ -48,18 +48,18 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
     Route::get('/laporan/options', [LaporanController::class, 'getOptions']);
     Route::get('/laporan', [LaporanController::class, 'index']);
     Route::get('/laporan/nearby', [LaporanController::class, 'nearby']);
-    Route::post('/laporan', [LaporanController::class, 'store']);
+    Route::post('/laporan', [LaporanController::class, 'store'])->middleware('throttle:30,1');
     Route::get('/laporan/{id}', [LaporanController::class, 'show']);
     Route::match(['put', 'patch'], '/laporan/{id}/status', [LaporanController::class, 'updateStatus']);
 
     // Route Khusus Pengguna & Relawan (Beranda & CRUD Profile)
     Route::middleware('role:pengguna,relawan')->group(function () {
-        
+
         // CRUD Profil Pengguna (Nama, Foto, Kategori, Kontak, Aksesibilitas, Metode Komunikasi)
         Route::get('/pengguna/profile', [ProfilePenggunaController::class, 'show']);
         Route::put('/pengguna/profile', [ProfilePenggunaController::class, 'update']);
-        Route::post('/pengguna/profile', [ProfilePenggunaController::class, 'update']); // Untuk Multipart Form-Data (Upload Foto)
-        Route::post('/pengguna/profile/foto', [ProfilePenggunaController::class, 'uploadFoto']);
+        Route::post('/pengguna/profile', [ProfilePenggunaController::class, 'update'])->middleware('throttle:20,1'); // Untuk Multipart Form-Data (Upload Foto)
+        Route::post('/pengguna/profile/foto', [ProfilePenggunaController::class, 'uploadFoto'])->middleware('throttle:20,1');
         Route::delete('/pengguna/profile/foto', [ProfilePenggunaController::class, 'destroyFoto']);
     });
 
@@ -148,7 +148,7 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         // Kelola Profil Admin (Lihat Profil, Edit Data Diri & Foto, Ubah Email, Ubah Password, Hapus Foto)
         Route::get('/admin/profile', [AdminProfileController::class, 'show']);
         Route::put('/admin/profile', [AdminProfileController::class, 'update']);
-        Route::post('/admin/profile', [AdminProfileController::class, 'update']); // Untuk Multipart Form-Data (Upload Foto)
+        Route::post('/admin/profile', [AdminProfileController::class, 'update'])->middleware('throttle:20,1'); // Untuk Multipart Form-Data (Upload Foto)
         Route::put('/admin/profile/security', [AdminProfileController::class, 'updateSecurity']);
         Route::delete('/admin/profile/foto', [AdminProfileController::class, 'destroyFoto']);
 
@@ -245,9 +245,32 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
 
 // Route proxy untuk mengambil file dari storage (berguna agar lolos CORS saat development dengan artisan serve)
 Route::get('/storage-file/{path}', function ($path) {
-    $fullPath = storage_path('app/public/' . $path);
-    if (!file_exists($fullPath)) {
+    $basePath = realpath(storage_path('app/public'));
+    if (!$basePath) {
         abort(404);
     }
-    return response()->file($fullPath);
-})->where('path', '.*');
+
+    $targetPath = storage_path('app/public/' . $path);
+    $realPath = realpath($targetPath);
+
+    // 1. Proteksi Path Traversal: pastikan file ada, berupa file (bukan direktori),
+    // dan path kanonikalnya harus berada di dalam direktori storage app/public
+    if (!$realPath || !is_file($realPath) || !str_starts_with($realPath, $basePath . DIRECTORY_SEPARATOR)) {
+        abort(404);
+    }
+
+    // 2. Proteksi Ekstensi Terlarang / Eksekusi Skrip: Hanya ekstensi media & dokumen aman yang diizinkan
+    $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'mp3', 'wav', 'm4a', 'aac', 'ogg', 'webm', '3gp', 'pdf'];
+    $extension = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
+    if (!in_array($extension, $allowedExtensions, true)) {
+        abort(403, 'Akses terhadap tipe file ini ditolak demi keamanan.');
+    }
+
+    // 3. Kembalikan file dengan Security Headers (mencegah MIME sniffing, iframe embedding, dan script injection)
+    return response()->file($realPath, [
+        'X-Content-Type-Options'  => 'nosniff',
+        'Content-Security-Policy' => "default-src 'none'; sandbox",
+        'X-Frame-Options'         => 'DENY',
+        'Cache-Control'           => 'private, max-age=3600',
+    ]);
+})->where('path', '.*')->middleware('throttle:120,1');

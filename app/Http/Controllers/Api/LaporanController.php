@@ -43,6 +43,14 @@ class LaporanController extends Controller
             ], 403);
         }
 
+        // Proteksi Relawan belum terverifikasi
+        if ($user->role === 'relawan' && ($user->status_verifikasi !== 'terverifikasi' || !$user->is_active)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Akses ditolak. Akun relawan Anda belum diverifikasi oleh administrator.'
+            ], 403);
+        }
+
         $query = Laporan::with(['pengguna', 'relawan'])->latest();
 
         if ($user->role === 'pengguna') {
@@ -114,8 +122,15 @@ class LaporanController extends Controller
             'deskripsi'           => 'nullable|string',
             'pesan_cepat'         => 'nullable',
             'keterangan_tambahan' => 'nullable|string',
-            'foto_laporan'        => 'nullable|file|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'foto_laporan'        => 'nullable|file|image|mimes:jpeg,png,jpg,webp|max:5120|dimensions:max_width=4096,max_height=4096',
             'rekam_suara'         => 'nullable|file|mimes:mp3,wav,m4a,aac,ogg,webm,3gp|max:10240',
+        ], [
+            'foto_laporan.image'      => 'File foto laporan harus berupa gambar yang valid.',
+            'foto_laporan.mimes'      => 'Format foto laporan harus berupa JPEG, PNG, JPG, atau WEBP.',
+            'foto_laporan.max'        => 'Ukuran foto laporan maksimal 5 MB.',
+            'foto_laporan.dimensions' => 'Dimensi foto laporan maksimal 4096 x 4096 piksel.',
+            'rekam_suara.mimes'       => 'Format rekaman suara harus berupa MP3, WAV, M4A, AAC, OGG, WEBM, atau 3GP.',
+            'rekam_suara.max'         => 'Ukuran file rekaman suara maksimal 10 MB.',
         ]);
 
         if ($validator->fails()) {
@@ -234,6 +249,14 @@ class LaporanController extends Controller
      */
     public function nearby(Request $request)
     {
+        $user = $request->user();
+        if ($user && $user->role === 'relawan' && ($user->status_verifikasi !== 'terverifikasi' || !$user->is_active)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Akses ditolak. Akun relawan Anda belum diverifikasi oleh administrator.'
+            ], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'latitude'  => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
@@ -296,6 +319,14 @@ class LaporanController extends Controller
             ], 403);
         }
 
+        // Proteksi Relawan belum terverifikasi
+        if ($user->role === 'relawan' && ($user->status_verifikasi !== 'terverifikasi' || !$user->is_active)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Akses ditolak. Akun relawan Anda belum diverifikasi oleh administrator.'
+            ], 403);
+        }
+
         if ($user->role === 'pengguna' && $laporan->id_pengguna !== $user->id) {
             return response()->json(['message' => 'Akses ditolak'], 403);
         }
@@ -329,6 +360,14 @@ class LaporanController extends Controller
         if ($user->role === 'admin' && !$user->hasPermission('kelola_laporan')) {
             return response()->json([
                 'message' => "Akses ditolak. Anda belum memiliki hak akses 'kelola_laporan' dari Superadmin. Silakan hubungi Superadmin."
+            ], 403);
+        }
+
+        // Proteksi Relawan belum terverifikasi
+        if ($user->role === 'relawan' && ($user->status_verifikasi !== 'terverifikasi' || !$user->is_active)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Akses ditolak. Akun relawan Anda belum diverifikasi oleh administrator.'
             ], 403);
         }
 

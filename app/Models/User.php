@@ -60,6 +60,16 @@ class User extends Authenticatable
     protected $hidden = [];
 
     /**
+     * The accessors to append to the model's array and JSON form.
+     *
+     * @var list<string>
+     */
+    protected $appends = [
+        'foto_profile_url',
+        'dokumen_kyc_url',
+    ];
+
+    /**
      * The model's default values for attributes.
      *
      * @var array<string, mixed>
@@ -109,7 +119,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Accessor untuk dokumen_kyc_url
+     * Accessor untuk dokumen_kyc_url (hanya file lokal yang valid)
      */
     public function getDokumenKycUrlAttribute(): ?string
     {
@@ -117,8 +127,9 @@ class User extends Authenticatable
             return null;
         }
 
+        // Demi keamanan, dokumen KYC harus berupa file lokal di storage kyc_documents
         if (str_starts_with($this->dokumen_kyc, 'http://') || str_starts_with($this->dokumen_kyc, 'https://')) {
-            return $this->dokumen_kyc;
+            return null;
         }
 
         return url('storage/' . $this->dokumen_kyc);

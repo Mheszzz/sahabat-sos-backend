@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
@@ -210,13 +211,25 @@ class AuthController extends Controller
             'status_ketersediaan' => 'nullable|string',
             'device_id'           => 'nullable|string',
             'lokasi_user'         => 'nullable|string',
-            'dokumen_kyc'         => 'nullable',
+            'dokumen_kyc'         => $request->hasFile('dokumen_kyc')
+                ? 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240'
+                : ['nullable', 'string', 'max:500', 'regex:/^kyc_documents\/[a-zA-Z0-9_\-\.]+\.(pdf|jpg|jpeg|png)$/'],
+        ], [
+            'dokumen_kyc.file'    => 'Dokumen KYC harus berupa file unggahan fisik.',
+            'dokumen_kyc.mimes'   => 'Dokumen KYC harus berupa file PDF, JPG, JPEG, atau PNG.',
+            'dokumen_kyc.max'     => 'Ukuran file dokumen KYC maksimal 10 MB.',
+            'dokumen_kyc.regex'   => 'Format path dokumen KYC tidak valid atau mengarah ke lokasi tidak diizinkan.',
         ]);
 
         if ($request->hasFile('dokumen_kyc')) {
             $path = $request->file('dokumen_kyc')->store('kyc_documents', 'public');
             $validated['dokumen_kyc'] = $path;
         } elseif ($request->filled('dokumen_kyc') && is_string($request->dokumen_kyc)) {
+            if (str_contains($request->dokumen_kyc, '..') || str_contains($request->dokumen_kyc, "\0") || !Storage::disk('public')->exists($request->dokumen_kyc)) {
+                return response()->json([
+                    'message' => 'File dokumen KYC yang dirujuk tidak ditemukan di sistem.'
+                ], 422);
+            }
             $validated['dokumen_kyc'] = $request->dokumen_kyc;
         }
 
@@ -428,7 +441,7 @@ class AuthController extends Controller
             'alamat'              => ($isRelawan ? 'required' : 'nullable') . '|string|max:255',
             'pekerjaan'           => ($isRelawan ? 'required' : 'nullable') . '|string|max:255',
             'alasan_relawan'      => ($isRelawan ? 'required' : 'nullable') . '|string|max:1000',
-            'dokumen_kyc'         => 'nullable',
+            'dokumen_kyc'         => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ], [
             'persetujuan_privasi.required' => 'Anda harus menyetujui syarat & ketentuan penggunaan data pribadi dan medis untuk mendaftar.',
             'persetujuan_privasi.accepted' => 'Anda harus menyetujui syarat & ketentuan penggunaan data pribadi dan medis untuk mendaftar.',
@@ -436,6 +449,9 @@ class AuthController extends Controller
             'no_telp.required'             => 'Nomor HP wajib diisi untuk pendaftaran relawan.',
             'pekerjaan.required'           => 'Pekerjaan wajib diisi untuk pendaftaran relawan.',
             'alasan_relawan.required'      => 'Alasan menjadi relawan wajib diisi untuk pendaftaran relawan.',
+            'dokumen_kyc.file'             => 'Dokumen KYC harus berupa file unggahan fisik (bukan teks atau link).',
+            'dokumen_kyc.mimes'            => 'Dokumen KYC harus berupa file PDF, JPG, JPEG, atau PNG.',
+            'dokumen_kyc.max'              => 'Ukuran file dokumen KYC maksimal 10 MB.',
         ]);
 
         $email = strtolower(trim($request->email));
@@ -453,8 +469,6 @@ class AuthController extends Controller
             $dokumenKyc = null;
             if ($request->hasFile('dokumen_kyc')) {
                 $dokumenKyc = $request->file('dokumen_kyc')->store('kyc_documents', 'public');
-            } elseif ($request->filled('dokumen_kyc') && is_string($request->dokumen_kyc)) {
-                $dokumenKyc = $request->dokumen_kyc;
             }
 
             $user = User::create([

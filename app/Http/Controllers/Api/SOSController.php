@@ -322,9 +322,27 @@ class SOSController extends Controller
     }
 
     // Menampilkan SOS berdasarkan ID beserta status perangkat dan activity log
-    public function show($id)
+    public function show($id, Request $request)
     {
         $sos = SOS::with(['pengguna', 'relawan', 'activities.user'])->findOrFail($id);
+        $user = $request->user();
+
+        // Proteksi IDOR/BOLA:
+        // - Pengguna hanya boleh melihat SOS miliknya sendiri.
+        // - Relawan harus sudah terverifikasi dan aktif.
+        if ($user) {
+            if ($user->role === 'pengguna' && (int)$sos->id_pengguna !== (int)$user->id) {
+                return response()->json([
+                    'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melihat kasus SOS ini.'
+                ], 403);
+            }
+
+            if ($user->role === 'relawan' && ($user->status_verifikasi !== 'terverifikasi' || !$user->is_active)) {
+                return response()->json([
+                    'message' => 'Akses ditolak. Akun relawan Anda belum diverifikasi oleh administrator.'
+                ], 403);
+            }
+        }
 
         $activityLog = $sos->activities->map(function ($act) {
             return [
@@ -348,9 +366,26 @@ class SOSController extends Controller
     }
 
     // Endpoint khusus untuk mengambil list riwayat aktivitas kasus SOS
-    public function getActivities($id)
+    public function getActivities($id, Request $request)
     {
         $sos = SOS::findOrFail($id);
+        $user = $request->user();
+
+        // Proteksi IDOR/BOLA:
+        if ($user) {
+            if ($user->role === 'pengguna' && (int)$sos->id_pengguna !== (int)$user->id) {
+                return response()->json([
+                    'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melihat riwayat aktivitas kasus SOS ini.'
+                ], 403);
+            }
+
+            if ($user->role === 'relawan' && ($user->status_verifikasi !== 'terverifikasi' || !$user->is_active)) {
+                return response()->json([
+                    'message' => 'Akses ditolak. Akun relawan Anda belum diverifikasi oleh administrator.'
+                ], 403);
+            }
+        }
+
         $activities = $sos->activities()->with('user')->get()->map(function ($act) {
             return [
                 'id'          => $act->id,
