@@ -171,6 +171,10 @@ class User extends Authenticatable
      */
     public function isProfileComplete(): bool
     {
+        if ($this->role === 'relawan' && $this->status_verifikasi === 'pending') {
+            return !empty($this->no_telp) && !empty($this->alamat) && !empty($this->dokumen_kyc);
+        }
+
         return !empty($this->no_telp) && !empty($this->alamat);
     }
 

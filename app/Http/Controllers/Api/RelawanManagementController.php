@@ -89,7 +89,12 @@ class RelawanManagementController extends Controller
         $query = User::with('accounts')->where('role', 'relawan');
 
         if ($request->filled('status_verifikasi')) {
-            $query->where('status_verifikasi', $request->status_verifikasi);
+            if ($request->status_verifikasi !== 'all') {
+                $query->where('status_verifikasi', $request->status_verifikasi);
+            }
+        } else {
+            // Default untuk daftar relawan: hanya relawan yang sudah terverifikasi
+            $query->where('status_verifikasi', 'terverifikasi');
         }
 
         $columns = [

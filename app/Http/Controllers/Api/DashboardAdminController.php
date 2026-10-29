@@ -87,14 +87,18 @@ class DashboardAdminController extends Controller
         $daruratSosAktifCount = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])->count();
 
         // Relawan stats
-        $totalRelawan = User::where('role', 'relawan')->where('is_active', true)->count();
+        $totalRelawan = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
+            ->where('is_active', true)
+            ->count();
         $relawanSedangBertugasCount = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
             ->whereNotNull('id_relawan')
             ->pluck('id_relawan')
             ->unique()
             ->count();
-            
+
         $relawanOffCount = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
             ->where('is_active', true)
             ->whereNotNull('status_ketersediaan')
             ->whereNotIn('status_ketersediaan', ['tersedia', 'siaga'])
@@ -237,6 +241,7 @@ class DashboardAdminController extends Controller
             ->values();
 
         $posisiRelawan = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
             ->where('is_active', true)
             ->get()
             ->map(function ($relawan) {
@@ -445,6 +450,7 @@ class DashboardAdminController extends Controller
 
         $hasCoordinates = !empty($lat) && !empty($lng);
         $allActiveRelawans = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
             ->where('is_active', true)
             ->get();
 

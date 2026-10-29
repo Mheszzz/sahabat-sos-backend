@@ -76,6 +76,7 @@ class PetaKasusAdminController extends Controller
 
         // 3. Posisi Relawan Lapangan (Siaga & Sedang Bertugas)
         $posisiRelawan = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
             ->where('is_active', true)
             ->get()
             ->map(function ($relawan) {

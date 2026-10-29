@@ -196,13 +196,20 @@ class AuthController extends Controller
             ], 403);
         }
 
-        $validated = $request->validate([
+        $targetRole = $request->input('role', $user->role);
+        $isRelawan = $targetRole === 'relawan';
+
+        // Validasi KTP / KYC untuk Relawan (Wajib unggah berkas KTP baru jika belum memiliki dokumen)
+        $hasExistingDoc = !empty($user->dokumen_kyc);
+        $kycRequired = $isRelawan && !$hasExistingDoc;
+
+        $rules = [
             'alamat'              => 'required|string|max:255',
             'no_telp'             => 'required|string|max:20|unique:users,no_telp,' . $user->id,
             'role'                => 'nullable|in:pengguna,relawan',
-            'pekerjaan'           => 'nullable|string|max:255',
-            'alasan_relawan'      => 'nullable|string|max:1000',
-            'kategori_user'       => 'nullable|in:umum,tunarungu,tunanetra,tunawicara', 
+            'pekerjaan'           => ($isRelawan ? 'required' : 'nullable') . '|string|max:255',
+            'alasan_relawan'      => ($isRelawan ? 'required' : 'nullable') . '|string|max:1000',
+            'kategori_user'       => 'nullable|in:umum,tunarungu,tunanetra,tunawicara',
             'catatan_medis'       => 'nullable|string',
             'getaran'             => 'nullable|boolean',
             'talkback'            => 'nullable|boolean',
@@ -211,14 +218,29 @@ class AuthController extends Controller
             'status_ketersediaan' => 'nullable|string',
             'device_id'           => 'nullable|string',
             'lokasi_user'         => 'nullable|string',
-            'dokumen_kyc'         => $request->hasFile('dokumen_kyc')
-                ? 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240'
-                : ['nullable', 'string', 'max:500', 'regex:/^kyc_documents\/[a-zA-Z0-9_\-\.]+\.(pdf|jpg|jpeg|png)$/'],
-        ], [
-            'dokumen_kyc.file'    => 'Dokumen KYC harus berupa file unggahan fisik.',
-            'dokumen_kyc.mimes'   => 'Dokumen KYC harus berupa file PDF, JPG, JPEG, atau PNG.',
-            'dokumen_kyc.max'     => 'Ukuran file dokumen KYC maksimal 10 MB.',
-            'dokumen_kyc.regex'   => 'Format path dokumen KYC tidak valid atau mengarah ke lokasi tidak diizinkan.',
+        ];
+
+        if ($request->hasFile('dokumen_kyc')) {
+            $rules['dokumen_kyc'] = ($kycRequired ? 'required' : 'nullable') . '|file|mimes:pdf,jpg,jpeg,png|max:10240';
+        } else {
+            $rules['dokumen_kyc'] = [
+                $kycRequired ? 'required' : 'nullable',
+                'string',
+                'max:500',
+                'regex:/^kyc_documents\/[a-zA-Z0-9_\-\.]+\.(pdf|jpg|jpeg|png)$/'
+            ];
+        }
+
+        $validated = $request->validate($rules, [
+            'alamat.required'         => 'Alamat wajib diisi.',
+            'no_telp.required'        => 'Nomor telepon wajib diisi.',
+            'pekerjaan.required'      => 'Pekerjaan / keahlian wajib diisi untuk pendaftaran relawan.',
+            'alasan_relawan.required' => 'Alasan menjadi relawan wajib diisi.',
+            'dokumen_kyc.required'    => 'Foto KTP / identitas wajib diunggah untuk verifikasi akun relawan.',
+            'dokumen_kyc.file'        => 'Dokumen KYC harus berupa file unggahan fisik.',
+            'dokumen_kyc.mimes'       => 'Dokumen KYC harus berupa file PDF, JPG, JPEG, atau PNG.',
+            'dokumen_kyc.max'         => 'Ukuran file dokumen KYC maksimal 10 MB.',
+            'dokumen_kyc.regex'       => 'Format path dokumen KYC tidak valid atau mengarah ke lokasi tidak diizinkan.',
         ]);
 
         if ($request->hasFile('dokumen_kyc')) {
@@ -441,7 +463,7 @@ class AuthController extends Controller
             'alamat'              => ($isRelawan ? 'required' : 'nullable') . '|string|max:255',
             'pekerjaan'           => ($isRelawan ? 'required' : 'nullable') . '|string|max:255',
             'alasan_relawan'      => ($isRelawan ? 'required' : 'nullable') . '|string|max:1000',
-            'dokumen_kyc'         => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'dokumen_kyc'         => ($isRelawan ? 'required' : 'nullable') . '|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ], [
             'persetujuan_privasi.required' => 'Anda harus menyetujui syarat & ketentuan penggunaan data pribadi dan medis untuk mendaftar.',
             'persetujuan_privasi.accepted' => 'Anda harus menyetujui syarat & ketentuan penggunaan data pribadi dan medis untuk mendaftar.',
@@ -449,6 +471,7 @@ class AuthController extends Controller
             'no_telp.required'             => 'Nomor HP wajib diisi untuk pendaftaran relawan.',
             'pekerjaan.required'           => 'Pekerjaan wajib diisi untuk pendaftaran relawan.',
             'alasan_relawan.required'      => 'Alasan menjadi relawan wajib diisi untuk pendaftaran relawan.',
+            'dokumen_kyc.required'         => 'Foto KTP / identitas wajib diunggah untuk pendaftaran relawan.',
             'dokumen_kyc.file'             => 'Dokumen KYC harus berupa file unggahan fisik (bukan teks atau link).',
             'dokumen_kyc.mimes'            => 'Dokumen KYC harus berupa file PDF, JPG, JPEG, atau PNG.',
             'dokumen_kyc.max'              => 'Ukuran file dokumen KYC maksimal 10 MB.',
