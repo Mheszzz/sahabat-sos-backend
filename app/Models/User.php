@@ -41,7 +41,9 @@ class User extends Authenticatable
         'last_located_at',
         'pekerjaan',
         'alasan_relawan',
+        'dokumen_kyc',
         'status_verifikasi',
+        'alasan_penolakan',
         'persetujuan_privasi',
         'waktu_persetujuan',
         'permissions',
@@ -56,6 +58,16 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $hidden = [];
+
+    /**
+     * The accessors to append to the model's array and JSON form.
+     *
+     * @var list<string>
+     */
+    protected $appends = [
+        'foto_profile_url',
+        'dokumen_kyc_url',
+    ];
 
     /**
      * The model's default values for attributes.
@@ -107,11 +119,29 @@ class User extends Authenticatable
     }
 
     /**
+     * Accessor untuk dokumen_kyc_url (hanya file lokal yang valid)
+     */
+    public function getDokumenKycUrlAttribute(): ?string
+    {
+        if (!$this->dokumen_kyc) {
+            return null;
+        }
+
+        // Demi keamanan, dokumen KYC harus berupa file lokal di storage kyc_documents
+        if (str_starts_with($this->dokumen_kyc, 'http://') || str_starts_with($this->dokumen_kyc, 'https://')) {
+            return null;
+        }
+
+        return url('storage/' . $this->dokumen_kyc);
+    }
+
+    /**
      * Scope query untuk mencari user/relawan terdekat berdasarkan latitude & longitude (Formula Haversine).
      */
     public function scopeNearby($query, float $latitude, float $longitude, float $radiusInKm = 5.0)
     {
-        $haversine = "(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude))))";
+        $earthRadius = (float) config('sos.earth_radius_km', 6371.0);
+        $haversine = "({$earthRadius} * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude))))";
 
         return $query->selectRaw("*, {$haversine} AS distance", [$latitude, $longitude, $latitude])
             ->whereNotNull('latitude')
@@ -141,6 +171,10 @@ class User extends Authenticatable
      */
     public function isProfileComplete(): bool
     {
+        if ($this->role === 'relawan' && $this->status_verifikasi === 'pending') {
+            return !empty($this->no_telp) && !empty($this->alamat) && !empty($this->dokumen_kyc);
+        }
+
         return !empty($this->no_telp) && !empty($this->alamat);
     }
 
@@ -223,5 +257,13 @@ class User extends Authenticatable
 
         $permissions = $this->permissions ?? [];
         return in_array($permission, $permissions);
+    }
+
+    /**
+     * Relasi ke Smartwatch yang dipasangkan oleh pengguna
+     */
+    public function smartwatches()
+    {
+        return $this->hasMany(UserSmartwatch::class, 'id_pengguna');
     }
 }

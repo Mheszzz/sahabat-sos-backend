@@ -23,8 +23,10 @@ class DatabaseSeeder extends Seeder
         $superadminAccount = Account::where('email', 'superadmin@sahabatsos.com')->where('provider', 'local')->first();
         if (!$superadminAccount) {
             $superadmin = User::create([
-                'name' => 'Super Admin',
-                'role' => 'superadmin',
+                'name'    => 'Super Admin',
+                'role'    => 'superadmin',
+                'alamat'  => 'Kantor Pusat Sahabat SOS',
+                'no_telp' => '081234567891',
             ]);
 
             Account::create([
@@ -32,6 +34,11 @@ class DatabaseSeeder extends Seeder
                 'provider' => 'local',
                 'email'    => 'superadmin@sahabatsos.com',
                 'password' => Hash::make('password123'),
+            ]);
+        } else if ($superadminAccount->user && empty($superadminAccount->user->no_telp)) {
+            $superadminAccount->user->update([
+                'no_telp' => '081234567891',
+                'alamat'  => 'Kantor Pusat Sahabat SOS',
             ]);
         }
 

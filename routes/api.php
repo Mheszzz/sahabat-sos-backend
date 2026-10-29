@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\KasusAktifController;
 use App\Http\Controllers\Api\HubungiWhatsAppController;
 use App\Http\Controllers\Api\BerandaRelawanController;
 use App\Http\Controllers\Api\AdminProfileController;
+use App\Http\Controllers\Api\SmartwatchController;
 
 // Public Authentication Routes
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -47,18 +48,18 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
     Route::get('/laporan/options', [LaporanController::class, 'getOptions']);
     Route::get('/laporan', [LaporanController::class, 'index']);
     Route::get('/laporan/nearby', [LaporanController::class, 'nearby']);
-    Route::post('/laporan', [LaporanController::class, 'store']);
+    Route::post('/laporan', [LaporanController::class, 'store'])->middleware('throttle:30,1');
     Route::get('/laporan/{id}', [LaporanController::class, 'show']);
-    Route::put('/laporan/{id}/status', [LaporanController::class, 'updateStatus']);
+    Route::match(['put', 'patch'], '/laporan/{id}/status', [LaporanController::class, 'updateStatus']);
 
     // Route Khusus Pengguna & Relawan (Beranda & CRUD Profile)
     Route::middleware('role:pengguna,relawan')->group(function () {
-        
+
         // CRUD Profil Pengguna (Nama, Foto, Kategori, Kontak, Aksesibilitas, Metode Komunikasi)
         Route::get('/pengguna/profile', [ProfilePenggunaController::class, 'show']);
         Route::put('/pengguna/profile', [ProfilePenggunaController::class, 'update']);
-        Route::post('/pengguna/profile', [ProfilePenggunaController::class, 'update']); // Untuk Multipart Form-Data (Upload Foto)
-        Route::post('/pengguna/profile/foto', [ProfilePenggunaController::class, 'uploadFoto']);
+        Route::post('/pengguna/profile', [ProfilePenggunaController::class, 'update'])->middleware('throttle:20,1'); // Untuk Multipart Form-Data (Upload Foto)
+        Route::post('/pengguna/profile/foto', [ProfilePenggunaController::class, 'uploadFoto'])->middleware('throttle:20,1');
         Route::delete('/pengguna/profile/foto', [ProfilePenggunaController::class, 'destroyFoto']);
     });
 
@@ -68,10 +69,11 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
     Route::middleware('role:pengguna')->group(function () {
         // SOS Endpoints
         Route::post('/sos/trigger', [SOSController::class, 'store']); // membuat SOS baru
+        Route::post('/sos', [SOSController::class, 'store']); // alias endpoint SOS baru
         Route::get('/sos/active', [SOSController::class, 'getActiveUserSOS']); //SOS tampil untuk pengguna
         Route::get('/sos/user/history', [SOSController::class, 'getUserSOSHistory']);
-        Route::post('/sos/{id}/cancel', [SOSController::class, 'cancel']); //membatalkan SOS
-        Route::get('/sos/{id}', [SOSController::class, 'show']); 
+        Route::match(['post', 'put', 'patch'], '/sos/{id}/cancel', [SOSController::class, 'cancel']); //membatalkan SOS
+        Route::get('/sos/{id}', [SOSController::class, 'show']);
         Route::get('/sos/{id}/activities', [SOSController::class, 'getActivities']); // Riwayat aktivitas SOS 
 
         // Kontak Darurat Endpoints (CRUD)
@@ -83,6 +85,14 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::patch('/pengguna/kontak-darurat/{id}/toggle-notif', [KontakDaruratController::class, 'toggleNotif']);
         // Riwayat Lengkap Pengguna (SOS & Laporan)
         Route::get('/pengguna/riwayat', [BerandaRelawanController::class, 'riwayatPengguna']);
+
+        // Smartwatch Management Endpoints
+        Route::get('/pengguna/smartwatch', [SmartwatchController::class, 'index']);
+        Route::post('/pengguna/smartwatch', [SmartwatchController::class, 'store']);
+        Route::get('/pengguna/smartwatch/{id}', [SmartwatchController::class, 'show']);
+        Route::put('/pengguna/smartwatch/{id}', [SmartwatchController::class, 'update']);
+        Route::delete('/pengguna/smartwatch/{id}', [SmartwatchController::class, 'destroy']);
+        Route::post('/pengguna/smartwatch/{id}/sync-telemetry', [SmartwatchController::class, 'syncTelemetry']);
     });
 
     // Route Khusus Relawan
@@ -114,14 +124,23 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
 
             // SOS Endpoints
             Route::get('/sos/active/relawan', [SOSController::class, 'getActiveRelawanSOS']); // SOS tampil untuk semua relawan
-            Route::get('/sos/relawan/tasks', [SOSController::class, 'activeTask']); // menampilkan SOS yang sedang ditangani 
-            Route::patch('/sos/{id}/status', [SOSController::class, 'updateStatus']); // mengubah status SOS (proses/selesai)
+            Route::get('/sos/relawan/tasks', [SOSController::class, 'activeTask']); // menampilkan SOS yang sedang ditangani
+            Route::match(['put', 'patch'], '/sos/{id}/status', [SOSController::class, 'updateStatus']); // mengubah status SOS (proses/selesai)
             Route::post('/sos/{id}/reject', [SOSController::class, 'rejectSOS']); // menolak SOS yang ditawarkan
 
             // Chat WhatsApp Pengguna (Korban/Pelapor) oleh Relawan
             Route::match(['get', 'post'], '/relawan/chat-wa/{tipe}/{id}', [HubungiWhatsAppController::class, 'hubungiPengguna']);
             Route::match(['get', 'post'], '/relawan/tugas/{tipe}/{id}/chat-wa', [HubungiWhatsAppController::class, 'hubungiPengguna']);
+            Route::match(['get', 'post'], '/relawan/tugas/{tipe}/{id}/hubungi-kontak-darurat', [HubungiWhatsAppController::class, 'hubungi']);
+            Route::get('/relawan/tugas/{tipe}/{id}/kontak-darurat', [HubungiWhatsAppController::class, 'hubungi']);
         });
+    });
+
+    // Koordinasi WhatsApp (Hubungi Kontak Darurat & Chat Pengguna) - Dapat diakses Admin & Relawan Penanggung Jawab
+    Route::middleware('role:admin,superadmin,relawan')->group(function () {
+        Route::match(['get', 'post'], '/tugas-aktif/{tipe}/{id}/hubungi-kontak-darurat', [HubungiWhatsAppController::class, 'hubungi']);
+        Route::get('/tugas-aktif/{tipe}/{id}/kontak-darurat', [HubungiWhatsAppController::class, 'hubungi']);
+        Route::match(['get', 'post'], '/tugas-aktif/{tipe}/{id}/chat-pengguna', [HubungiWhatsAppController::class, 'hubungiPengguna']);
     });
 
     // Route Khusus Admin & Superadmin (Beranda Admin, Command Center, Verifikasi Relawan, & Kelola Opsi Laporan)
@@ -129,7 +148,7 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         // Kelola Profil Admin (Lihat Profil, Edit Data Diri & Foto, Ubah Email, Ubah Password, Hapus Foto)
         Route::get('/admin/profile', [AdminProfileController::class, 'show']);
         Route::put('/admin/profile', [AdminProfileController::class, 'update']);
-        Route::post('/admin/profile', [AdminProfileController::class, 'update']); // Untuk Multipart Form-Data (Upload Foto)
+        Route::post('/admin/profile', [AdminProfileController::class, 'update'])->middleware('throttle:20,1'); // Untuk Multipart Form-Data (Upload Foto)
         Route::put('/admin/profile/security', [AdminProfileController::class, 'updateSecurity']);
         Route::delete('/admin/profile/foto', [AdminProfileController::class, 'destroyFoto']);
 
@@ -147,27 +166,36 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         // Log Riwayat Aktivitas Kasus SOS (Timeline Audit)
         Route::get('/admin/sos/{id}/activities', [DashboardAdminController::class, 'getSosActivities']);
 
-        // Bunyikan Sirene Posko (Alarm Massal Darurat)
-        Route::post('/admin/posko/sirene', [DashboardAdminController::class, 'triggerSirenePosko']);
+        // Bunyikan Sirene Posko (Alarm Massal Darurat - Wajib izin broadcast_sirene)
+        Route::middleware('permission:broadcast_sirene')->group(function () {
+            Route::post('/admin/posko/sirene', [DashboardAdminController::class, 'triggerSirenePosko']);
+        });
 
-        // Ekspor Rekapitulasi Laporan ke File CSV
+        // Ekspor Rekapitulasi Kasus & Laporan ke File CSV
         Route::get('/admin/laporan/export', [DashboardAdminController::class, 'exportLaporanCsv']);
+        Route::get('/admin/sos/export', [DashboardAdminController::class, 'exportSosCsv']);
+        Route::get('/admin/kasus/export', [DashboardAdminController::class, 'exportKasusCsv']);
 
-        // Peta Kasus Aktif & Ringkasan Sebaran Urgensi Kasus
-        Route::get('/admin/dashboard/peta-kasus', [PetaKasusAdminController::class, 'index']);
-        Route::get('/admin/dashboard/sebaran-urgensi', [SebaranUrgensiAdminController::class, 'index']);
-        Route::get('/admin/dashboard/grafik-sos', [SebaranUrgensiAdminController::class, 'grafikSos']);
-        
-        // Kelola Master Data Kategori Laporan & Pesan Cepat (Hanya Admin & Superadmin)
+        // Peta Kasus Aktif & Ringkasan Sebaran Urgensi Kasus (Wajib izin pantau_peta atau kelola_laporan)
+        Route::middleware('permission:pantau_peta,kelola_laporan')->group(function () {
+            Route::get('/admin/dashboard/peta-kasus', [PetaKasusAdminController::class, 'index']);
+            Route::get('/admin/dashboard/sebaran-urgensi', [SebaranUrgensiAdminController::class, 'index']);
+            Route::get('/admin/dashboard/grafik-sos', [SebaranUrgensiAdminController::class, 'grafikSos']);
+        });
+
+        // Kelola Master Data Kategori Laporan & Pesan Cepat (Baca: Semua Admin, Mutasi: Superadmin/kelola_admin)
         Route::get('/admin/kategori-laporan', [LaporanOptionManagementController::class, 'indexKategori']);
-        Route::post('/admin/kategori-laporan', [LaporanOptionManagementController::class, 'storeKategori']);
-        Route::put('/admin/kategori-laporan/{id}', [LaporanOptionManagementController::class, 'updateKategori']);
-        Route::delete('/admin/kategori-laporan/{id}', [LaporanOptionManagementController::class, 'destroyKategori']);
-
         Route::get('/admin/pesan-cepat', [LaporanOptionManagementController::class, 'indexPesan']);
-        Route::post('/admin/pesan-cepat', [LaporanOptionManagementController::class, 'storePesan']);
-        Route::put('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'updatePesan']);
-        Route::delete('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'destroyPesan']);
+
+        Route::middleware('permission:kelola_admin')->group(function () {
+            Route::post('/admin/kategori-laporan', [LaporanOptionManagementController::class, 'storeKategori']);
+            Route::put('/admin/kategori-laporan/{id}', [LaporanOptionManagementController::class, 'updateKategori']);
+            Route::delete('/admin/kategori-laporan/{id}', [LaporanOptionManagementController::class, 'destroyKategori']);
+
+            Route::post('/admin/pesan-cepat', [LaporanOptionManagementController::class, 'storePesan']);
+            Route::put('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'updatePesan']);
+            Route::delete('/admin/pesan-cepat/{id}', [LaporanOptionManagementController::class, 'destroyPesan']);
+        });
 
         // Tugas Aktif Endpoints (Semua, Terpisah Laporan, Terpisah SOS, Detail, Dispatch, & Selesai)
         Route::get('/tugas-aktif', [KasusAktifController::class, 'index']);
@@ -176,9 +204,6 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::get('/tugas-aktif/{tipe}/{id}', [KasusAktifController::class, 'show']);
         Route::post('/tugas-aktif/{tipe}/{id}/dispatch', [KasusAktifController::class, 'dispatchRelawan']);
         Route::patch('/tugas-aktif/{tipe}/{id}/status', [KasusAktifController::class, 'tanganiKasus']);
-        Route::match(['get', 'post'], '/tugas-aktif/{tipe}/{id}/hubungi-kontak-darurat', [HubungiWhatsAppController::class, 'hubungi']);
-        Route::get('/tugas-aktif/{tipe}/{id}/kontak-darurat', [HubungiWhatsAppController::class, 'hubungi']);
-        Route::match(['get', 'post'], '/tugas-aktif/{tipe}/{id}/chat-pengguna', [HubungiWhatsAppController::class, 'hubungiPengguna']);
 
         // Riwayat Kasus Selesai (Audit Admin)
         Route::get('/admin/riwayat-kasus', [KasusAktifController::class, 'riwayatAdmin']);
@@ -187,6 +212,10 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         Route::middleware('permission:verifikasi_relawan')->group(function () {
             Route::get('/admin/relawan/pending', [AuthController::class, 'getPendingRelawan']);
             Route::put('/admin/relawan/{id}/verifikasi', [AuthController::class, 'verifikasiRelawan']);
+        });
+
+        // Kelola Direktori & Status Relawan (Wajib memiliki izin kelola_relawan atau verifikasi_relawan)
+        Route::middleware('permission:kelola_relawan,verifikasi_relawan')->group(function () {
             Route::post('/admin/relawan', [RelawanManagementController::class, 'store']);
             Route::get('/admin/relawan', [RelawanManagementController::class, 'index']);
             Route::put('/admin/relawan/{id}/updateStatus', [RelawanManagementController::class, 'updateStatus']);
@@ -195,10 +224,13 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
         });
     });
 
-    // Route Khusus Superadmin (Kelola Admin & Manajemen Hak Akses)
-    Route::middleware('role:superadmin')->prefix('superadmin')->group(function () {
+    // Route Khusus Superadmin & Admin dengan izin kelola_admin
+    Route::middleware('permission:kelola_admin')->prefix('superadmin')->group(function () {
         Route::get('/admins', [AdminManagementController::class, 'index']);
         Route::post('/admins', [AdminManagementController::class, 'store']);
+        Route::get('/admins/{id}', [AdminManagementController::class, 'show']);
+        Route::put('/admins/{id}', [AdminManagementController::class, 'update']);
+        Route::put('/admins/{id}/status', [AdminManagementController::class, 'updateStatus']);
         Route::put('/admins/{id}/permissions', [AdminManagementController::class, 'updatePermissions']);
         Route::delete('/admins/{id}/permissions', [AdminManagementController::class, 'revokePermissions']);
 
@@ -213,9 +245,32 @@ Route::middleware('auth:sanctum',CheckIsActive::class)->group(function () {
 
 // Route proxy untuk mengambil file dari storage (berguna agar lolos CORS saat development dengan artisan serve)
 Route::get('/storage-file/{path}', function ($path) {
-    $fullPath = storage_path('app/public/' . $path);
-    if (!file_exists($fullPath)) {
+    $basePath = realpath(storage_path('app/public'));
+    if (!$basePath) {
         abort(404);
     }
-    return response()->file($fullPath);
-})->where('path', '.*');
+
+    $targetPath = storage_path('app/public/' . $path);
+    $realPath = realpath($targetPath);
+
+    // 1. Proteksi Path Traversal: pastikan file ada, berupa file (bukan direktori),
+    // dan path kanonikalnya harus berada di dalam direktori storage app/public
+    if (!$realPath || !is_file($realPath) || !str_starts_with($realPath, $basePath . DIRECTORY_SEPARATOR)) {
+        abort(404);
+    }
+
+    // 2. Proteksi Ekstensi Terlarang / Eksekusi Skrip: Hanya ekstensi media & dokumen aman yang diizinkan
+    $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'mp3', 'wav', 'm4a', 'aac', 'ogg', 'webm', '3gp', 'pdf'];
+    $extension = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
+    if (!in_array($extension, $allowedExtensions, true)) {
+        abort(403, 'Akses terhadap tipe file ini ditolak demi keamanan.');
+    }
+
+    // 3. Kembalikan file dengan Security Headers (mencegah MIME sniffing, iframe embedding, dan script injection)
+    return response()->file($realPath, [
+        'X-Content-Type-Options'  => 'nosniff',
+        'Content-Security-Policy' => "default-src 'none'; sandbox",
+        'X-Frame-Options'         => 'DENY',
+        'Cache-Control'           => 'private, max-age=3600',
+    ]);
+})->where('path', '.*')->middleware('throttle:120,1');

@@ -16,9 +16,11 @@ class PetaKasusAdminController extends Controller
      */
     public function index(Request $request)
     {
-        // 1. Sinyal SOS Aktif (Urgensi Kritis - Merah)
+        // 1. Sinyal SOS Aktif yang memiliki koordinat GPS (Urgensi Kritis - Merah)
         $activeSosList = SOS::with(['pengguna', 'relawan'])
             ->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -34,6 +36,7 @@ class PetaKasusAdminController extends Controller
                 'urgensi'           => 'kritis',
                 'korban'            => $sos->pengguna->name ?? 'Pengguna SOS',
                 'jenis_disabilitas' => $sos->pengguna->kategori_user ?? 'umum',
+                'id_relawan'        => $sos->id_relawan,
                 'relawan_penangan'  => $sos->relawan->name ?? null,
                 'alamat'            => $sos->pengguna->alamat ?? null,
                 'lokasi'            => $sos->pengguna->alamat ?? null,
@@ -62,6 +65,7 @@ class PetaKasusAdminController extends Controller
                 'status'           => $lap->status,
                 'urgensi'          => 'sedang',
                 'pelapor'          => $lap->pengguna->name ?? 'Pengguna',
+                'id_relawan'       => $lap->id_relawan,
                 'relawan_penangan' => $lap->relawan->name ?? null,
                 'lokasi_laporan'   => $lap->lokasi_laporan,
                 'alamat'           => $lap->lokasi_laporan ?? ($lap->pengguna->alamat ?? null),
@@ -72,6 +76,7 @@ class PetaKasusAdminController extends Controller
 
         // 3. Posisi Relawan Lapangan (Siaga & Sedang Bertugas)
         $posisiRelawan = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
             ->where('is_active', true)
             ->get()
             ->map(function ($relawan) {
@@ -88,7 +93,15 @@ class PetaKasusAdminController extends Controller
                 $activeSOS = SOS::with('pengguna')->whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                     ->where('id_relawan', $relawan->id)
                     ->first();
-                $isBusy = $activeSOS !== null;
+
+                $activeLaporan = null;
+                if (!$activeSOS) {
+                    $activeLaporan = Laporan::with('pengguna')->whereIn('status', ['belum ditangani', 'menunggu', 'proses', 'ditangani', 'aktif'])
+                        ->where('id_relawan', $relawan->id)
+                        ->first();
+                }
+
+                $isBusy = ($activeSOS !== null) || ($activeLaporan !== null);
                 $isOff = $relawan->status_ketersediaan && !in_array($relawan->status_ketersediaan, ['tersedia', 'siaga']);
 
                 $statusLabel = 'siaga_bebas';
@@ -99,10 +112,24 @@ class PetaKasusAdminController extends Controller
                 }
 
                 $misiData = null;
-                if ($isBusy) {
+                if ($activeSOS) {
                     $misiData = [
+                        'id'       => $activeSOS->id,
+                        'tipe'     => 'sos',
                         'id_kasus' => "#SOS-{$activeSOS->id}",
+                        'pelapor'  => $activeSOS->pengguna->name ?? 'Pengguna',
+                        'kategori' => 'Darurat SOS',
                         'tujuan'   => $activeSOS->pengguna->alamat ?? 'Lokasi GPS Korban',
+                    ];
+                } elseif ($activeLaporan) {
+                    $nomorKasus = $activeLaporan->nomor_kasus ?? ("LP-" . $activeLaporan->id);
+                    $misiData = [
+                        'id'       => $activeLaporan->id,
+                        'tipe'     => 'laporan',
+                        'id_kasus' => $nomorKasus,
+                        'pelapor'  => $activeLaporan->pengguna->name ?? 'Warga Pelapor',
+                        'kategori' => $activeLaporan->kategori_laporan ?? 'Laporan Warga',
+                        'tujuan'   => $activeLaporan->lokasi_laporan ?? ($activeLaporan->pengguna->alamat ?? 'Lokasi Laporan'),
                     ];
                 }
 
@@ -117,8 +144,8 @@ class PetaKasusAdminController extends Controller
                     'lokasi_user'  => $relawan->lokasi_user ?? 'Area Siaga',
                     'misi'         => $misiData,
                     'telemetri'    => [
-                        'baterai' => '94%',
-                        'akurasi' => '±3m',
+                        'baterai' => isset($cachedLoc['baterai']) ? "{$cachedLoc['baterai']}%" : (isset($cachedLoc['battery']) ? "{$cachedLoc['battery']}%" : '92%'),
+                        'akurasi' => isset($cachedLoc['akurasi']) ? "±{$cachedLoc['akurasi']}m" : (isset($cachedLoc['accuracy']) ? "±{$cachedLoc['accuracy']}m" : '±5m'),
                     ]
                 ];
             })
@@ -145,7 +172,9 @@ class PetaKasusAdminController extends Controller
             ],
             'data' => [
                 'titik_darurat_sos'   => $titikDaruratSos,
+                'titik_darurat'       => $titikDaruratSos,
                 'titik_laporan_aktif' => $titikLaporanAktif,
+                'titik_laporan'       => $titikLaporanAktif,
                 'posisi_relawan'      => $posisiRelawan,
             ],
         ], 200);
@@ -153,16 +182,14 @@ class PetaKasusAdminController extends Controller
 
     private function determineVolunteerCompetency($relawan)
     {
-        if ($relawan->pekerjaan) {
+        if (!empty($relawan->pekerjaan)) {
             return $relawan->pekerjaan;
         }
 
-        $competencies = [
-            'Navigasi Tunanetra & P3K',
-            'Juru Bahasa Isyarat / JBI',
-            'Pendamping Mobilitas & Kursi Roda',
-        ];
+        if (!empty($relawan->keahlian)) {
+            return $relawan->keahlian;
+        }
 
-        return $competencies[$relawan->id % count($competencies)];
+        return $relawan->kategori_relawan ?? 'Relawan Pendamping Siaga';
     }
 }

@@ -31,7 +31,6 @@ class SOS extends Model
     ];
 
     protected $appends = [
-        'device_info',
         'id_kasus',
     ];
 
@@ -84,14 +83,16 @@ class SOS extends Model
     /**
      * Accessor untuk device_info agar selalu mengembalikan status perangkat (HP & Tuya IoT)
      */
-    public function getDeviceInfoAttribute($value)
+    public function getDeviceInfoAttribute($value = null)
     {
+        $value = $value ?? ($this->attributes['device_info'] ?? null);
         $raw = !empty($value) ? (is_array($value) ? $value : json_decode($value, true)) : [];
 
-        // Deteksi format terstruktur (punya key 'mobile' atau 'tuya') atau legacy flat
-        $hasStructured = isset($raw['mobile']) || isset($raw['tuya']);
+        // Deteksi format terstruktur (punya key 'mobile', 'tuya', atau 'smartwatch') atau legacy flat
+        $hasStructured = isset($raw['mobile']) || isset($raw['tuya']) || isset($raw['smartwatch']);
         $mobileRaw = $hasStructured ? ($raw['mobile'] ?? []) : $raw;
         $tuyaRaw = $raw['tuya'] ?? null;
+        $smartwatchRaw = $raw['smartwatch'] ?? null;
 
         // Telemetri Mobile (HP Pengguna)
         $batteryLevel = $mobileRaw['battery_level'] ?? ($this->attributes['battery_level'] ?? ($raw['battery_level'] ?? 85));
@@ -145,7 +146,38 @@ class SOS extends Model
             ];
         }
 
-        $triggerSource = $raw['trigger_source'] ?? ($tuya ? 'tuya_physical_button' : 'app_button');
+        // Telemetri Perangkat Smartwatch (jika ada)
+        $smartwatch = null;
+        if (!empty($smartwatchRaw)) {
+            $watchBattery = isset($smartwatchRaw['battery_level']) && $smartwatchRaw['battery_level'] !== null
+                ? (int) $smartwatchRaw['battery_level']
+                : null;
+            $heartRate = isset($smartwatchRaw['heart_rate']) && $smartwatchRaw['heart_rate'] !== null
+                ? (int) $smartwatchRaw['heart_rate']
+                : null;
+            $fallDetected = (bool) ($smartwatchRaw['fall_detected'] ?? false);
+
+            $smartwatch = [
+                'device_id'       => $smartwatchRaw['device_id'] ?? 'smartwatch',
+                'device_name'     => $smartwatchRaw['device_name'] ?? ($smartwatchRaw['name'] ?? 'Smartwatch'),
+                'brand'           => $smartwatchRaw['brand'] ?? 'smartwatch',
+                'device_model'    => $smartwatchRaw['device_model'] ?? ($smartwatchRaw['model'] ?? 'Smartwatch'),
+                'is_online'       => (bool) ($smartwatchRaw['is_online'] ?? true),
+                'battery_level'   => $watchBattery,
+                'battery_status'  => $watchBattery !== null ? ($watchBattery < 20 ? 'Kritis' : ($watchBattery < 50 ? 'Sedang' : 'Baik')) : 'N/A',
+                'is_battery_low'  => $watchBattery !== null && $watchBattery < 20,
+                'heart_rate'      => $heartRate,
+                'fall_detected'   => $fallDetected,
+                'trigger_type'    => $smartwatchRaw['trigger_type'] ?? ($fallDetected ? 'Deteksi Jatuh Jam' : 'Tombol SOS Jam'),
+                'last_seen'       => $smartwatchRaw['last_seen'] ?? now()->toIso8601String(),
+            ];
+        }
+
+        $triggerSource = $raw['trigger_source'] ?? (
+            $tuya ? 'tuya_physical_button' : (
+                $smartwatch ? ($smartwatch['fall_detected'] ? 'smartwatch_fall_detection' : 'smartwatch_button') : 'app_button'
+            )
+        );
 
         return [
             // Flat alias untuk kompatibilitas kode lama
@@ -159,10 +191,16 @@ class SOS extends Model
             'is_charging'     => $isCharging,
 
             // Struktur lengkap telemetri baru
-            'trigger_source'  => $triggerSource,
-            'is_warning'      => ($batteryLevel < 20) || ($tuya && $tuya['is_battery_low']),
-            'mobile'          => $mobile,
-            'tuya'            => $tuya,
+            'trigger_source'       => $triggerSource,
+            'is_warning'           => ($batteryLevel < 20) || ($tuya && $tuya['is_battery_low']) || ($smartwatch && $smartwatch['is_battery_low']),
+            'is_gps_fallback'      => (bool) ($raw['is_gps_fallback'] ?? false),
+            'gps_status'           => $raw['gps_status'] ?? 'live_gps',
+            'gps_fallback_source'  => $raw['gps_fallback_source'] ?? null,
+            'gps_note'             => $raw['gps_note'] ?? null,
+            'original_coordinates' => $raw['original_coordinates'] ?? null,
+            'mobile'               => $mobile,
+            'tuya'                 => $tuya,
+            'smartwatch'           => $smartwatch,
         ];
     }
 

@@ -67,8 +67,13 @@ class ProfilePenggunaController extends Controller
             'kontras_tinggi'           => 'nullable|boolean',
             'mode_kontras_sangat_tinggi'=> 'nullable|boolean',
             'panduan_suara'            => 'nullable|boolean',
-            'foto_profile'             => 'nullable|file|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'foto_profile'             => 'nullable|file|image|mimes:jpeg,png,jpg,webp|max:5120|dimensions:max_width=4096,max_height=4096',
             'catatan_medis'            => 'nullable|string',
+        ], [
+            'foto_profile.image'      => 'File foto profil harus berupa gambar yang valid.',
+            'foto_profile.mimes'      => 'Format foto profil harus berupa JPEG, PNG, JPG, atau WEBP.',
+            'foto_profile.max'        => 'Ukuran foto profil maksimal 5 MB.',
+            'foto_profile.dimensions' => 'Dimensi foto profil maksimal 4096 x 4096 piksel.',
         ]);
 
         if ($validator->fails()) {
@@ -158,7 +163,13 @@ class ProfilePenggunaController extends Controller
     public function uploadFoto(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'foto_profile' => 'required|file|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'foto_profile' => 'required|file|image|mimes:jpeg,png,jpg,webp|max:5120|dimensions:max_width=4096,max_height=4096',
+        ], [
+            'foto_profile.required'   => 'File foto profil wajib dilampirkan.',
+            'foto_profile.image'      => 'File foto profil harus berupa gambar yang valid.',
+            'foto_profile.mimes'      => 'Format foto profil harus berupa JPEG, PNG, JPG, atau WEBP.',
+            'foto_profile.max'        => 'Ukuran foto profil maksimal 5 MB.',
+            'foto_profile.dimensions' => 'Dimensi foto profil maksimal 4096 x 4096 piksel.',
         ]);
 
         if ($validator->fails()) {

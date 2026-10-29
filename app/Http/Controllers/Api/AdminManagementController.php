@@ -135,13 +135,20 @@ class AdminManagementController extends Controller
     public function updatePermissions($id, Request $request)
     {
         $request->validate([
-            'permissions'   => 'required|array',
+            'permissions'   => 'present|array',
             'permissions.*' => 'string|in:verifikasi_relawan,kelola_laporan,pantau_peta,kelola_relawan,broadcast_sirene,kelola_admin',
         ]);
 
         $admin = User::where('role', 'admin')->find($id);
         if (!$admin) {
             return response()->json(['message' => 'Akun Admin tidak ditemukan.'], 404);
+        }
+
+        // Cegah admin non-superadmin mengubah hak aksesnya sendiri
+        if ($admin->id === $request->user()->id && $request->user()->role !== 'superadmin') {
+            return response()->json([
+                'message' => 'Anda tidak dapat mengubah hak akses untuk akun Anda sendiri.'
+            ], 403);
         }
 
         $admin->update([
@@ -166,6 +173,13 @@ class AdminManagementController extends Controller
             return response()->json(['message' => 'Akun Admin tidak ditemukan.'], 404);
         }
 
+        // Cegah admin non-superadmin mencabut hak aksesnya sendiri
+        if ($admin->id === $request->user()->id && $request->user()->role !== 'superadmin') {
+            return response()->json([
+                'message' => 'Anda tidak dapat mencabut hak akses untuk akun Anda sendiri.'
+            ], 403);
+        }
+
         $admin->update([
             'permissions'            => [],
             'permissions_granted_at' => null,
@@ -175,6 +189,153 @@ class AdminManagementController extends Controller
         return response()->json([
             'message' => "Seluruh hak akses untuk Admin '{$admin->name}' telah dicabut. Admin sekarang hanya dapat mengakses Beranda.",
             'admin'   => $admin->fresh(),
+        ]);
+    }
+
+    /**
+     * 5. DETAIL LENGKAP ADMIN (GET /api/superadmin/admins/{id})
+     */
+    public function show($id, Request $request)
+    {
+        $admin = User::whereIn('role', ['admin', 'superadmin'])
+            ->with(['grantedBy:id,name', 'accounts'])
+            ->find($id);
+
+        if (!$admin) {
+            return response()->json(['message' => 'Akun Admin tidak ditemukan.'], 404);
+        }
+
+        $email = $admin->accounts->firstWhere('provider', 'local')?->email
+            ?? $admin->accounts->first()?->email;
+        $admin->email = $email;
+
+        return response()->json([
+            'message' => 'Berhasil mengambil detail Admin',
+            'data'    => $admin,
+        ]);
+    }
+
+    /**
+     * 6. UPDATE DATA AKUN ADMIN (PUT /api/superadmin/admins/{id})
+     */
+    public function update($id, Request $request)
+    {
+        $admin = User::where('role', 'admin')->find($id);
+        if (!$admin) {
+            return response()->json(['message' => 'Akun Admin tidak ditemukan atau tidak dapat diubah.'], 404);
+        }
+
+        $request->validate([
+            'name'     => 'sometimes|required|string|max:255',
+            'email'    => 'sometimes|required|email|max:255',
+            'password' => 'nullable|string|min:6',
+            'no_telp'  => 'nullable|string|max:20|unique:users,no_telp,' . $admin->id,
+            'alamat'   => 'nullable|string|max:255',
+        ]);
+
+        $account = $admin->accounts()->where('provider', 'local')->first();
+
+        if ($request->has('email')) {
+            $email = strtolower(trim($request->email));
+            $existingAccount = Account::where('email', $email)
+                ->where('user_id', '!=', $admin->id)
+                ->first();
+
+            if ($existingAccount) {
+                return response()->json([
+                    'message' => 'Email sudah terdaftar untuk pengguna lain.'
+                ], 422);
+            }
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $adminData = [];
+            if ($request->has('name')) $adminData['name'] = $request->name;
+            if ($request->has('no_telp')) $adminData['no_telp'] = $request->no_telp;
+            if ($request->has('alamat')) $adminData['alamat'] = $request->alamat;
+
+            if (!empty($adminData)) {
+                $admin->update($adminData);
+            }
+
+            if ($account) {
+                $accountData = [];
+                if (isset($email)) $accountData['email'] = $email;
+                if ($request->filled('password')) $accountData['password'] = Hash::make($request->password);
+
+                if (!empty($accountData)) {
+                    $account->update($accountData);
+                }
+            }
+
+            DB::commit();
+
+            $updatedAdmin = $admin->fresh()->load('grantedBy:id,name');
+            $updatedAdmin->email = $account ? $account->email : ($request->email ?? null);
+
+            return response()->json([
+                'message' => "Data Admin '{$admin->name}' berhasil diperbarui.",
+                'data'    => $updatedAdmin,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Gagal memperbarui akun Admin.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * 7. AKTIFKAN / NONAKTIFKAN AKUN ADMIN (PUT /api/superadmin/admins/{id}/status)
+     */
+    public function updateStatus($id, Request $request)
+    {
+        $request->validate([
+            'is_active' => 'required|boolean',
+        ]);
+
+        $admin = User::whereIn('role', ['admin', 'superadmin'])->find($id);
+        if (!$admin) {
+            return response()->json(['message' => 'Akun Admin tidak ditemukan.'], 404);
+        }
+
+        $isActive = filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN);
+
+        // Pencegahan self-lockout
+        if ($admin->id === $request->user()->id && !$isActive) {
+            return response()->json([
+                'message' => 'Anda tidak dapat menonaktifkan akun Anda sendiri.'
+            ], 422);
+        }
+
+        // Cegah penonaktifan Superadmin
+        if ($admin->role === 'superadmin' && !$isActive) {
+            return response()->json([
+                'message' => 'Akun Superadmin tidak dapat dinonaktifkan.'
+            ], 422);
+        }
+
+        $admin->is_active = $isActive;
+        $admin->save();
+
+        // Jika dinonaktifkan, cabut seluruh token aktif admin tersebut
+        if (!$isActive) {
+            $admin->tokens()->delete();
+        }
+
+        $statusText = $isActive ? 'diaktifkan' : 'dinonaktifkan';
+
+        return response()->json([
+            'message' => "Akun Admin '{$admin->name}' berhasil {$statusText}.",
+            'data'    => [
+                'id'        => $admin->id,
+                'name'      => $admin->name,
+                'is_active' => (bool) $admin->is_active,
+            ]
         ]);
     }
 }

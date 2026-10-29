@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('id_sos')->constrained('s_o_s')->onDelete('cascade');
             $table->foreignId('id_relawan')->constrained('users')->onDelete('cascade');
+            $table->string('alasan')->nullable();
             $table->timestamps();
         });
     }

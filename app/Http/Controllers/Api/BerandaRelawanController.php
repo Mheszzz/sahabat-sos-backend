@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Laporan;
 use App\Models\SOS;
+use App\Events\RelawanStatusUpdated;
 
 class BerandaRelawanController extends Controller
 {
@@ -209,6 +210,12 @@ class BerandaRelawanController extends Controller
         $user->update([
             'status_ketersediaan' => $request->status_ketersediaan
         ]);
+
+        try {
+            broadcast(new RelawanStatusUpdated($user));
+        } catch (\Throwable $e) {
+            // Abaikan jika broadcast websocket sedang offline
+        }
 
         return response()->json([
             'success' => true,

@@ -11,6 +11,7 @@ use App\Models\KategoriLaporan;
 use App\Models\User;
 use App\Models\SOSActivity;
 use App\Events\SOSUpdateStatus;
+use App\Events\LaporanCreated;
 use App\Http\Controllers\Api\HubungiWhatsAppController;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +29,7 @@ class KasusAktifController extends Controller
     {
         $s = strtolower(trim($status ?? ''));
         return match ($s) {
-            'aktif', 'pending', 'belum tertangani', 'belum_tertangani', 'belum ditangani', 'belum_ditangani' => 'Belum Tertangani',
+            'aktif', 'pending', 'menunggu', 'belum tertangani', 'belum_tertangani', 'belum ditangani', 'belum_ditangani' => 'Belum Tertangani',
             'proses', 'ditangani', 'dalam penanganan' => 'Ditangani',
             'selesai' => 'Selesai',
             'batal'   => 'Batal',
@@ -44,7 +45,7 @@ class KasusAktifController extends Controller
         if (!$status) return null;
         $s = strtolower(trim($status));
         return match ($s) {
-            'belum tertangani', 'belum_tertangani', 'belum ditangani', 'belum_ditangani', 'aktif' => ['belum ditangani', 'aktif'],
+            'belum tertangani', 'belum_tertangani', 'belum ditangani', 'belum_ditangani', 'aktif', 'menunggu', 'pending' => ['belum ditangani', 'aktif'],
             'ditangani', 'proses' => ['ditangani', 'proses'],
             'selesai' => ['selesai'],
             'batal'   => ['batal'],
@@ -391,6 +392,12 @@ class KasusAktifController extends Controller
                 'id_relawan' => $relawan->id,
                 'status'     => 'ditangani',
             ]);
+
+            try {
+                broadcast(new \App\Events\LaporanCreated($laporan));
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Gagal broadcast LaporanCreated pada KasusAktifController::dispatch: " . $e->getMessage());
+            }
 
             return response()->json([
                 'message' => "Relawan {$relawan->name} berhasil ditugaskan ke Laporan #{$laporan->id}",

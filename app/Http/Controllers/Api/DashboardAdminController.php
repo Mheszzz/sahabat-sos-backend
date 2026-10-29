@@ -8,6 +8,7 @@ use App\Models\Laporan;
 use App\Models\User;
 use App\Models\SOSActivity;
 use App\Events\SOSUpdateStatus;
+use App\Events\LaporanCreated;
 use App\Events\PoskoSireneTriggered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,12 +31,34 @@ class DashboardAdminController extends Controller
         $today = now()->toDateString();
         $yesterday = now()->subDay()->toDateString();
 
-        $sosHariIni = SOS::whereDate('waktu_sos', $today)->count();
-        $sosKemarin = SOS::whereDate('waktu_sos', $yesterday)->count();
+        $sosHariIni = SOS::where(function ($q) use ($today) {
+            $q->whereDate('waktu_sos', $today)
+              ->orWhere(function ($sub) use ($today) {
+                  $sub->whereNull('waktu_sos')->whereDate('created_at', $today);
+              });
+        })->count();
+
+        $sosKemarin = SOS::where(function ($q) use ($yesterday) {
+            $q->whereDate('waktu_sos', $yesterday)
+              ->orWhere(function ($sub) use ($yesterday) {
+                  $sub->whereNull('waktu_sos')->whereDate('created_at', $yesterday);
+              });
+        })->count();
         $sosTrenPercentage = $this->calculateTrendPercentage($sosHariIni, $sosKemarin);
 
-        $laporanHariIni = Laporan::whereDate('created_at', $today)->count();
-        $laporanKemarin = Laporan::whereDate('created_at', $yesterday)->count();
+        $laporanHariIni = Laporan::where(function ($q) use ($today) {
+            $q->whereDate('waktu_laporan', $today)
+              ->orWhere(function ($sub) use ($today) {
+                  $sub->whereNull('waktu_laporan')->whereDate('created_at', $today);
+              });
+        })->count();
+
+        $laporanKemarin = Laporan::where(function ($q) use ($yesterday) {
+            $q->whereDate('waktu_laporan', $yesterday)
+              ->orWhere(function ($sub) use ($yesterday) {
+                  $sub->whereNull('waktu_laporan')->whereDate('created_at', $yesterday);
+              });
+        })->count();
         $laporanTrenPercentage = $this->calculateTrendPercentage($laporanHariIni, $laporanKemarin);
 
         // Kasus Periode (Hari Ini, Minggu Lalu, Bulan Lalu)
@@ -64,14 +87,18 @@ class DashboardAdminController extends Controller
         $daruratSosAktifCount = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])->count();
 
         // Relawan stats
-        $totalRelawan = User::where('role', 'relawan')->where('is_active', true)->count();
+        $totalRelawan = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
+            ->where('is_active', true)
+            ->count();
         $relawanSedangBertugasCount = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
             ->whereNotNull('id_relawan')
             ->pluck('id_relawan')
             ->unique()
             ->count();
-            
+
         $relawanOffCount = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
             ->where('is_active', true)
             ->whereNotNull('status_ketersediaan')
             ->whereNotIn('status_ketersediaan', ['tersedia', 'siaga'])
@@ -172,7 +199,17 @@ class DashboardAdminController extends Controller
                     'nama'             => $relawan->name,
                     'no_telp'          => $relawan->no_telp,
                     'pekerjaan'        => $relawan->pekerjaan ?? 'Relawan Pendamping',
-                    'eta'              => '~4 menit',
+                    'eta'              => (function() use ($sos, $relawan) {
+                        $cachedVolLoc = Cache::get("relawan:{$relawan->id}:location");
+                        $volLat = $cachedVolLoc['latitude'] ?? $relawan->latitude;
+                        $volLng = $cachedVolLoc['longitude'] ?? $relawan->longitude;
+                        if ($sos->latitude && $sos->longitude && $volLat && $volLng) {
+                            $distKm = $this->calculateHaversineDistance((float)$sos->latitude, (float)$sos->longitude, (float)$volLat, (float)$volLng);
+                            $travelMins = max(2, (int) round(($distKm / 30) * 60 + 2));
+                            return "~{$travelMins} menit";
+                        }
+                        return '~4 menit';
+                    })(),
                     'status_penanganan'=> 'Sedang Menuju TKP',
                 ] : null,
                 'status'        => $sos->status_sos,
@@ -183,22 +220,28 @@ class DashboardAdminController extends Controller
         // -------------------------------------------------------------
         // C. Peta Pantauan GIS Data
         // -------------------------------------------------------------
-        $titikDarurat = $activeSosList->map(function ($sos) {
-            $idKasus = $sos->nomor_kasus ?? ("SOS-" . $sos->id);
-            return [
-                'id'          => $sos->id,
-                'id_kasus'    => $idKasus,
-                'nomor_kasus' => $idKasus,
-                'latitude'    => (float) $sos->latitude,
-                'longitude'   => (float) $sos->longitude,
-                'status'      => $sos->status_sos,
-                'korban'      => $sos->pengguna->name ?? 'Pengguna SOS',
-                'relawan'     => $sos->relawan->name ?? null,
-                'device_info' => $sos->device_info,
-            ];
-        });
+        $titikDarurat = $activeSosList
+            ->filter(function ($sos) {
+                return !is_null($sos->latitude) && !is_null($sos->longitude) && (float) $sos->latitude != 0.0 && (float) $sos->longitude != 0.0;
+            })
+            ->map(function ($sos) {
+                $idKasus = $sos->nomor_kasus ?? ("SOS-" . $sos->id);
+                return [
+                    'id'          => $sos->id,
+                    'id_kasus'    => $idKasus,
+                    'nomor_kasus' => $idKasus,
+                    'latitude'    => (float) $sos->latitude,
+                    'longitude'   => (float) $sos->longitude,
+                    'status'      => $sos->status_sos,
+                    'korban'      => $sos->pengguna->name ?? 'Pengguna SOS',
+                    'relawan'     => $sos->relawan->name ?? null,
+                    'device_info' => $sos->device_info,
+                ];
+            })
+            ->values();
 
         $posisiRelawan = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
             ->where('is_active', true)
             ->get()
             ->map(function ($relawan) {
@@ -246,17 +289,44 @@ class DashboardAdminController extends Controller
                     'lokasi_user'  => $relawan->lokasi_user ?? 'Area Siaga',
                     'misi'         => $misiData,
                     'telemetri'    => [
-                        'baterai' => '94%',
-                        'akurasi' => '±3m',
+                        'baterai' => isset($cachedLoc['baterai']) ? "{$cachedLoc['baterai']}%" : (isset($cachedLoc['battery']) ? "{$cachedLoc['battery']}%" : '92%'),
+                        'akurasi' => isset($cachedLoc['akurasi']) ? "±{$cachedLoc['akurasi']}m" : (isset($cachedLoc['accuracy']) ? "±{$cachedLoc['accuracy']}m" : '±5m'),
                     ]
                 ];
             })
             ->filter()
             ->values();
 
+        $laporanAktifList = Laporan::with(['pengguna', 'relawan'])
+            ->whereIn('status', ['belum ditangani', 'ditangani', 'menunggu', 'proses', 'aktif'])
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $titikLaporan = $laporanAktifList->map(function ($lap) {
+            $idKasus = $lap->nomor_kasus ?? ("LP-" . $lap->id);
+            return [
+                'id'          => $lap->id,
+                'id_kasus'    => $idKasus,
+                'id_laporan'  => $idKasus,
+                'nomor_kasus' => $idKasus,
+                'latitude'    => (float) $lap->latitude,
+                'longitude'   => (float) $lap->longitude,
+                'kategori'    => $lap->kategori_laporan,
+                'status'      => $lap->status,
+                'pelapor'     => $lap->pengguna->name ?? 'Pengguna',
+                'relawan'     => $lap->relawan->name ?? null,
+                'lokasi'      => $lap->lokasi_laporan ?? ($lap->pengguna->alamat ?? 'Lokasi Laporan'),
+            ];
+        });
+
         $gisMap = [
-            'titik_darurat'     => $titikDarurat,
-            'posisi_relawan'    => $posisiRelawan,
+            'titik_darurat'      => $titikDarurat,
+            'titik_darurat_sos'  => $titikDarurat,
+            'titik_laporan'      => $titikLaporan,
+            'titik_laporan_aktif'=> $titikLaporan,
+            'posisi_relawan'     => $posisiRelawan,
         ];
 
         // -------------------------------------------------------------
@@ -264,9 +334,9 @@ class DashboardAdminController extends Controller
         // -------------------------------------------------------------
         $totalSosCount = SOS::count();
         $totalResolvedSos = SOS::where('status_sos', 'selesai')->count();
-        $tingkatKeberhasilan = $totalSosCount > 0 
-            ? round(($totalResolvedSos / $totalSosCount) * 100, 1) 
-            : 98.1; // Default benchmark jika belum ada data historis
+        $tingkatKeberhasilan = $totalSosCount > 0
+            ? round(($totalResolvedSos / $totalSosCount) * 100, 1)
+            : 100.0;
 
         // Sebaran kategori kebutuhan difabel
         $userCounts = User::where('role', 'pengguna')
@@ -379,46 +449,29 @@ class DashboardAdminController extends Controller
         }
 
         $hasCoordinates = !empty($lat) && !empty($lng);
-        $relawans = collect();
+        $allActiveRelawans = User::where('role', 'relawan')
+            ->where('status_verifikasi', 'terverifikasi')
+            ->where('is_active', true)
+            ->get();
 
-        if ($hasCoordinates) {
-            $relawans = User::where('role', 'relawan')
-                ->where('is_active', true)
-                ->whereNotNull('latitude')
-                ->whereNotNull('longitude')
-                ->nearby((float)$lat, (float)$lng, 10.0)
-                ->get();
-        }
-
-        $isFallback = false;
-        // Fallback jika koordinat tidak ada ATAU tidak ada relawan di dalam radius 10 km
-        if (!$hasCoordinates || $relawans->isEmpty()) {
-            $isFallback = true;
-            $relawans = User::where('role', 'relawan')
-                ->where('is_active', true)
-                ->orderByRaw("CASE WHEN status_ketersediaan = 'tersedia' THEN 1 ELSE 2 END")
-                ->latest()
-                ->get();
-        }
-
-        $data = $relawans->map(function ($relawan) use ($hasCoordinates, $isFallback) {
+        $relawanList = $allActiveRelawans->map(function ($relawan) use ($hasCoordinates, $lat, $lng) {
             $isBusy = SOS::whereIn('status_sos', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                 ->where('id_relawan', $relawan->id)
                 ->exists() || Laporan::whereIn('status', ['belum ditangani', 'ditangani', 'aktif', 'proses'])
                 ->where('id_relawan', $relawan->id)
                 ->exists();
 
+            $cachedLoc = Cache::get("relawan:{$relawan->id}:location");
+            $rLat = isset($cachedLoc['latitude']) ? (float) $cachedLoc['latitude'] : ($relawan->latitude !== null ? (float) $relawan->latitude : null);
+            $rLng = isset($cachedLoc['longitude']) ? (float) $cachedLoc['longitude'] : ($relawan->longitude !== null ? (float) $relawan->longitude : null);
+
             $distanceKm = null;
             $distanceText = '-';
 
-            if ($hasCoordinates && !$isFallback && isset($relawan->distance)) {
-                $distanceKm = round((float)$relawan->distance, 2);
+            if ($hasCoordinates && $rLat !== null && $rLng !== null) {
+                $distanceKm = round($this->calculateHaversineDistance((float)$lat, (float)$lng, $rLat, $rLng), 2);
                 $distanceText = $distanceKm < 1 ? round($distanceKm * 1000) . ' m' : "{$distanceKm} km";
             }
-
-            $cachedLoc = Cache::get("relawan:{$relawan->id}:location");
-            $lat = isset($cachedLoc['latitude']) ? (float) $cachedLoc['latitude'] : ($relawan->latitude !== null ? (float) $relawan->latitude : null);
-            $lng = isset($cachedLoc['longitude']) ? (float) $cachedLoc['longitude'] : ($relawan->longitude !== null ? (float) $relawan->longitude : null);
 
             return [
                 'id'            => $relawan->id,
@@ -428,10 +481,28 @@ class DashboardAdminController extends Controller
                 'jarak_km'      => $distanceKm,
                 'jarak_text'    => $distanceText,
                 'status'        => $isBusy ? 'sedang_bertugas' : 'siaga',
-                'latitude'      => $lat,
-                'longitude'     => $lng,
+                'status_ketersediaan' => $relawan->status_ketersediaan ?? 'tersedia',
+                'latitude'      => $rLat,
+                'longitude'     => $rLng,
             ];
         });
+
+        // Filter relawan terdekat dalam radius 10 km jika koordinat tersedia
+        $inRadius = $relawanList->filter(function ($r) {
+            return $r['jarak_km'] !== null && $r['jarak_km'] <= 10.0;
+        })->sortBy('jarak_km')->values();
+
+        $isFallback = false;
+        if ($hasCoordinates && $inRadius->isNotEmpty()) {
+            $data = $inRadius;
+        } else {
+            $isFallback = true;
+            // Fallback: Urutkan siaga terlebih dahulu, kemudian jarak jika ada
+            $data = $relawanList->sortBy([
+                ['status', 'asc'],
+                ['jarak_km', 'asc'],
+            ])->values();
+        }
 
         return response()->json([
             'message' => ($hasCoordinates && !$isFallback)
@@ -490,11 +561,20 @@ class DashboardAdminController extends Controller
             if ($laporan->status === 'selesai') {
                 return response()->json(['message' => 'Laporan ini sudah berstatus selesai.'], 422);
             }
+            if ($laporan->status === 'ditangani' || !empty($laporan->id_relawan)) {
+                return response()->json(['message' => 'Laporan ini sudah ditangani oleh relawan. Untuk mengganti relawan, silakan masuk ke Detail Kasus.'], 422);
+            }
 
             $laporan->update([
                 'id_relawan' => $relawan->id,
                 'status'     => 'ditangani',
             ]);
+
+            try {
+                broadcast(new LaporanCreated($laporan));
+            } catch (\Throwable $e) {
+                Log::warning("Gagal broadcast LaporanCreated pada dispatchRelawan: " . $e->getMessage());
+            }
 
             return response()->json([
                 'message' => "Berhasil menugaskan relawan {$relawan->name} ke Laporan #{$laporan->id}",
@@ -509,6 +589,9 @@ class DashboardAdminController extends Controller
         }
         if ($sos->status_sos === 'selesai' || $sos->status_sos === 'batal') {
             return response()->json(['message' => 'Sinyal SOS ini sudah tidak aktif.'], 422);
+        }
+        if ($sos->status_sos === 'ditangani' || !empty($sos->id_relawan)) {
+            return response()->json(['message' => 'Kasus SOS ini sudah ditangani oleh relawan. Untuk mengganti relawan, silakan masuk ke Detail Kasus.'], 422);
         }
 
         $sos->update([
@@ -530,7 +613,7 @@ class DashboardAdminController extends Controller
 
         // Broadcast event pembaruan status SOS
         try {
-            broadcast(new SOSUpdateStatus($sos))->toOthers();
+            broadcast(new SOSUpdateStatus($sos));
         } catch (\Throwable $e) {
             Log::warning("Gagal broadcast SOSUpdateStatus pada dispatchRelawan: " . $e->getMessage());
         }
@@ -635,9 +718,9 @@ class DashboardAdminController extends Controller
             'pesan'         => $pesan,
             'sos_id'        => $sosId,
             'posko'         => [
-                'nama'      => 'POSKO PUSAT SAHABAT SOS JAKARTA',
-                'latitude'  => -6.2088,
-                'longitude' => 106.8456,
+                'nama'      => 'POSKO PUSAT SAHABAT SOS D.I. YOGYAKARTA',
+                'latitude'  => -7.7956,
+                'longitude' => 110.3695,
             ],
             'radius_km'     => (float) $request->input('radius_km', 5.0),
             'triggered_by'  => [
@@ -650,7 +733,7 @@ class DashboardAdminController extends Controller
 
         // Broadcast event ke Reverb WebSocket
         try {
-            broadcast(new PoskoSireneTriggered($payload))->toOthers();
+            broadcast(new PoskoSireneTriggered($payload));
         } catch (\Throwable $e) {
             Log::warning("Gagal broadcast PoskoSireneTriggered: " . $e->getMessage());
         }
@@ -670,6 +753,42 @@ class DashboardAdminController extends Controller
             'message' => 'Sirene Posko berhasil dioperasikan dan dibroadcast ke seluruh posko/relawan.',
             'data'    => $payload,
         ], 200);
+    }
+
+    /**
+     * Sanitasi input teks CSV untuk mencegah kerentanan CSV Formula Injection (CWE-1236).
+     */
+    private function sanitizeCsvValue($value): string
+    {
+        if ($value === null || $value === '') {
+            return '-';
+        }
+        $str = (string) $value;
+        if (preg_match('/^[=+\-@\t\r]/', $str)) {
+            return "'" . $str;
+        }
+        return $str;
+    }
+
+    /**
+     * Hitung durasi penanganan kasus dari dibuat hingga selesai.
+     */
+    private function calculateDurasiPenanganan($createdAt, $updatedAt, $status): string
+    {
+        $statusNormalized = strtolower(trim((string) $status));
+        if (in_array($statusNormalized, ['selesai', 'resolved', 'ditangani', 'dibatalkan'])) {
+            if ($createdAt && $updatedAt) {
+                $seconds = Carbon::parse($createdAt)->diffInSeconds(Carbon::parse($updatedAt));
+                $minutes = floor($seconds / 60);
+                $remainingSeconds = $seconds % 60;
+                if ($minutes > 0) {
+                    return "{$minutes} menit {$remainingSeconds} detik";
+                }
+                return "{$remainingSeconds} detik";
+            }
+            return '-';
+        }
+        return 'Sedang Berlangsung';
     }
 
     /**
@@ -721,27 +840,222 @@ class DashboardAdminController extends Controller
                 'Status Laporan',
                 'Ditangani Oleh (Relawan)',
                 'No. Telp Relawan',
+                'Durasi Penanganan',
             ]);
 
             foreach ($laporans as $lap) {
                 $pelapor = $lap->pengguna;
                 $relawan = $lap->relawan;
+                $durasi = $this->calculateDurasiPenanganan($lap->created_at, $lap->updated_at, $lap->status);
 
                 fputcsv($handle, [
-                    $lap->id,
-                    '#LAP-' . $lap->id,
-                    $lap->created_at ? $lap->created_at->format('Y-m-d H:i:s') : '-',
-                    $lap->kategori_laporan ?? '-',
-                    $lap->deskripsi ?? ($lap->pesan_cepat ?? '-'),
-                    $pelapor ? $pelapor->name : 'Anonim',
-                    $pelapor ? $pelapor->no_telp : '-',
-                    $pelapor ? ($pelapor->kategori_user ?? 'umum') : 'umum',
-                    $lap->latitude ?? '-',
-                    $lap->longitude ?? '-',
-                    $lap->lokasi_laporan ?? ($lap->alamat ?? '-'),
-                    $lap->status ?? 'aktif',
-                    $relawan ? $relawan->name : 'Belum Ditugaskan',
-                    $relawan ? $relawan->no_telp : '-',
+                    $this->sanitizeCsvValue($lap->id),
+                    $this->sanitizeCsvValue($lap->nomor_kasus ?? ('#LAP-' . $lap->id)),
+                    $this->sanitizeCsvValue($lap->created_at ? $lap->created_at->format('Y-m-d H:i:s') : '-'),
+                    $this->sanitizeCsvValue($lap->kategori_laporan ?? '-'),
+                    $this->sanitizeCsvValue($lap->deskripsi ?? ($lap->pesan_cepat ?? '-')),
+                    $this->sanitizeCsvValue($pelapor ? $pelapor->name : 'Anonim'),
+                    $this->sanitizeCsvValue($pelapor ? $pelapor->no_telp : '-'),
+                    $this->sanitizeCsvValue($pelapor ? ($pelapor->kategori_user ?? 'umum') : 'umum'),
+                    $this->sanitizeCsvValue($lap->latitude ?? '-'),
+                    $this->sanitizeCsvValue($lap->longitude ?? '-'),
+                    $this->sanitizeCsvValue($lap->lokasi_laporan ?? ($lap->alamat ?? '-')),
+                    $this->sanitizeCsvValue($lap->status ?? 'aktif'),
+                    $this->sanitizeCsvValue($relawan ? $relawan->name : 'Belum Ditugaskan'),
+                    $this->sanitizeCsvValue($relawan ? $relawan->no_telp : '-'),
+                    $this->sanitizeCsvValue($durasi),
+                ]);
+            }
+
+            fclose($handle);
+        };
+
+        return response()->stream($callback, 200, [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Pragma'              => 'no-cache',
+            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires'             => '0',
+        ]);
+    }
+
+    /**
+     * 7b. EKSPOR KASUS SOS KE CSV (GET /api/admin/sos/export)
+     */
+    public function exportSosCsv(Request $request)
+    {
+        $query = SOS::with(['pengguna', 'relawan'])->orderBy('created_at', 'desc');
+
+        if ($request->filled('status')) {
+            $query->where('status_sos', $request->status);
+        }
+
+        if ($request->filled('start_date')) {
+            $query->whereDate('created_at', '>=', $request->start_date);
+        }
+
+        if ($request->filled('end_date')) {
+            $query->whereDate('created_at', '<=', $request->end_date);
+        }
+
+        $sosList = $query->get();
+
+        $filename = 'kasus_sos_sahabat_sos_' . now()->format('Ymd_His') . '.csv';
+
+        $callback = function () use ($sosList) {
+            $handle = fopen('php://output', 'w');
+
+            // Tambahkan UTF-8 BOM agar terbaca sempurna di Microsoft Excel
+            fputs($handle, "\xEF\xBB\xBF");
+
+            // Header Kolom CSV Kasus Darurat SOS
+            fputcsv($handle, [
+                'ID SOS',
+                'Nomor Kasus',
+                'Tanggal & Waktu Kejadian',
+                'Tingkat Urgensi',
+                'Nama Korban / Pengguna',
+                'No. Telp Korban',
+                'Disabilitas Korban',
+                'Latitude',
+                'Longitude',
+                'Alamat / Lokasi Darurat',
+                'Status Kasus SOS',
+                'Ditangani Oleh (Relawan)',
+                'No. Telp Relawan',
+                'Durasi Penanganan',
+            ]);
+
+            foreach ($sosList as $sos) {
+                $pengguna = $sos->pengguna;
+                $relawan = $sos->relawan;
+                $durasi = $this->calculateDurasiPenanganan($sos->created_at, $sos->updated_at, $sos->status_sos);
+
+                fputcsv($handle, [
+                    $this->sanitizeCsvValue($sos->id),
+                    $this->sanitizeCsvValue($sos->nomor_kasus ?? ('#SOS-' . $sos->id)),
+                    $this->sanitizeCsvValue($sos->created_at ? $sos->created_at->format('Y-m-d H:i:s') : '-'),
+                    $this->sanitizeCsvValue('Kritis / Darurat'),
+                    $this->sanitizeCsvValue($pengguna ? $pengguna->name : 'Pengguna SOS'),
+                    $this->sanitizeCsvValue($pengguna ? $pengguna->no_telp : '-'),
+                    $this->sanitizeCsvValue($pengguna ? ($pengguna->kategori_user ?? 'umum') : 'umum'),
+                    $this->sanitizeCsvValue($sos->latitude ?? '-'),
+                    $this->sanitizeCsvValue($sos->longitude ?? '-'),
+                    $this->sanitizeCsvValue($pengguna ? ($pengguna->alamat ?? '-') : '-'),
+                    $this->sanitizeCsvValue($sos->status_sos ?? 'aktif'),
+                    $this->sanitizeCsvValue($relawan ? $relawan->name : 'Belum Ditugaskan'),
+                    $this->sanitizeCsvValue($relawan ? $relawan->no_telp : '-'),
+                    $this->sanitizeCsvValue($durasi),
+                ]);
+            }
+
+            fclose($handle);
+        };
+
+        return response()->stream($callback, 200, [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Pragma'              => 'no-cache',
+            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires'             => '0',
+        ]);
+    }
+
+    /**
+     * 7c. EKSPOR SEMUA KASUS (SOS & LAPORAN) TERPADU KE CSV (GET /api/admin/kasus/export)
+     */
+    public function exportKasusCsv(Request $request)
+    {
+        $startDate = $request->query('start_date');
+        $endDate = $request->query('end_date');
+
+        $sosQuery = SOS::with(['pengguna', 'relawan'])->orderBy('created_at', 'desc');
+        $lapQuery = Laporan::with(['pengguna', 'relawan'])->orderBy('created_at', 'desc');
+
+        if ($startDate) {
+            $sosQuery->whereDate('created_at', '>=', $startDate);
+            $lapQuery->whereDate('created_at', '>=', $startDate);
+        }
+        if ($endDate) {
+            $sosQuery->whereDate('created_at', '<=', $endDate);
+            $lapQuery->whereDate('created_at', '<=', $endDate);
+        }
+
+        $sosList = $sosQuery->get();
+        $lapList = $lapQuery->get();
+
+        $filename = 'rekap_semua_kasus_sahabat_sos_' . now()->format('Ymd_His') . '.csv';
+
+        $callback = function () use ($sosList, $lapList) {
+            $handle = fopen('php://output', 'w');
+            fputs($handle, "\xEF\xBB\xBF");
+
+            fputcsv($handle, [
+                'Tipe Kasus',
+                'ID Kasus',
+                'Nomor Kasus',
+                'Tanggal & Waktu Kejadian',
+                'Kategori / Urgensi',
+                'Keterangan / Deskripsi',
+                'Nama Korban / Pelapor',
+                'No. Telp Korban / Pelapor',
+                'Disabilitas',
+                'Latitude',
+                'Longitude',
+                'Lokasi',
+                'Status Kasus',
+                'Relawan Penolong',
+                'No. Telp Relawan',
+                'Durasi Penanganan',
+            ]);
+
+            foreach ($sosList as $sos) {
+                $p = $sos->pengguna;
+                $r = $sos->relawan;
+                $durasi = $this->calculateDurasiPenanganan($sos->created_at, $sos->updated_at, $sos->status_sos);
+
+                fputcsv($handle, [
+                    'SOS (Darurat)',
+                    $this->sanitizeCsvValue($sos->id),
+                    $this->sanitizeCsvValue($sos->nomor_kasus ?? ('#SOS-' . $sos->id)),
+                    $this->sanitizeCsvValue($sos->created_at ? $sos->created_at->format('Y-m-d H:i:s') : '-'),
+                    'Kritis / Darurat',
+                    'Sinyal Darurat SOS',
+                    $this->sanitizeCsvValue($p ? $p->name : 'Pengguna SOS'),
+                    $this->sanitizeCsvValue($p ? $p->no_telp : '-'),
+                    $this->sanitizeCsvValue($p ? ($p->kategori_user ?? 'umum') : 'umum'),
+                    $this->sanitizeCsvValue($sos->latitude ?? '-'),
+                    $this->sanitizeCsvValue($sos->longitude ?? '-'),
+                    $this->sanitizeCsvValue($p ? ($p->alamat ?? '-') : '-'),
+                    $this->sanitizeCsvValue($sos->status_sos ?? 'aktif'),
+                    $this->sanitizeCsvValue($r ? $r->name : 'Belum Ditugaskan'),
+                    $this->sanitizeCsvValue($r ? $r->no_telp : '-'),
+                    $this->sanitizeCsvValue($durasi),
+                ]);
+            }
+
+            foreach ($lapList as $lap) {
+                $p = $lap->pengguna;
+                $r = $lap->relawan;
+                $durasi = $this->calculateDurasiPenanganan($lap->created_at, $lap->updated_at, $lap->status);
+
+                fputcsv($handle, [
+                    'Laporan Cepat',
+                    $this->sanitizeCsvValue($lap->id),
+                    $this->sanitizeCsvValue($lap->nomor_kasus ?? ('#LAP-' . $lap->id)),
+                    $this->sanitizeCsvValue($lap->created_at ? $lap->created_at->format('Y-m-d H:i:s') : '-'),
+                    $this->sanitizeCsvValue($lap->kategori_laporan ?? 'Umum'),
+                    $this->sanitizeCsvValue($lap->deskripsi ?? ($lap->pesan_cepat ?? '-')),
+                    $this->sanitizeCsvValue($p ? $p->name : 'Anonim'),
+                    $this->sanitizeCsvValue($p ? $p->no_telp : '-'),
+                    $this->sanitizeCsvValue($p ? ($p->kategori_user ?? 'umum') : 'umum'),
+                    $this->sanitizeCsvValue($lap->latitude ?? '-'),
+                    $this->sanitizeCsvValue($lap->longitude ?? '-'),
+                    $this->sanitizeCsvValue($lap->lokasi_laporan ?? ($lap->alamat ?? '-')),
+                    $this->sanitizeCsvValue($lap->status ?? 'aktif'),
+                    $this->sanitizeCsvValue($r ? $r->name : 'Belum Ditugaskan'),
+                    $this->sanitizeCsvValue($r ? $r->no_telp : '-'),
+                    $this->sanitizeCsvValue($durasi),
                 ]);
             }
 
@@ -769,28 +1083,53 @@ class DashboardAdminController extends Controller
                 'message' => 'Kata kunci pencarian kosong',
                 'data'    => [
                     'kasus_sos' => [],
+                    'laporan'   => [],
                     'pengguna'  => [],
                     'relawan'   => [],
                 ],
             ], 200);
         }
 
-        // Search SOS by ID or raw number
-        $cleanId = preg_replace('/[^0-9]/', '', $query);
-        $sosQuery = SOS::with(['pengguna', 'relawan']);
-        if (!empty($cleanId)) {
-            $sosQuery->where('id', $cleanId);
-        } else {
-            $sosQuery->whereHas('pengguna', function ($q) use ($query) {
-                $q->where('name', 'like', "%{$query}%");
+        // Search SOS by ID, nomor_kasus, pengguna, or relawan
+        $sosQuery = SOS::with(['pengguna', 'relawan'])
+            ->where(function ($q) use ($query) {
+                if (is_numeric($query)) {
+                    $q->where('id', (int) $query);
+                }
+                $q->orWhere('nomor_kasus', 'like', "%{$query}%")
+                  ->orWhereHas('pengguna', function ($sub) use ($query) {
+                      $sub->where('name', 'like', "%{$query}%")
+                          ->orWhere('no_telp', 'like', "%{$query}%");
+                  })
+                  ->orWhereHas('relawan', function ($sub) use ($query) {
+                      $sub->where('name', 'like', "%{$query}%");
+                  });
             });
-        }
         $kasusSos = $sosQuery->take(5)->get();
+
+        // Search Laporan by ID, nomor_kasus, kategori, pengguna, or relawan
+        $laporanQuery = Laporan::with(['pengguna', 'relawan'])
+            ->where(function ($q) use ($query) {
+                if (is_numeric($query)) {
+                    $q->where('id', (int) $query);
+                }
+                $q->orWhere('nomor_kasus', 'like', "%{$query}%")
+                  ->orWhere('kategori_laporan', 'like', "%{$query}%")
+                  ->orWhereHas('pengguna', function ($sub) use ($query) {
+                      $sub->where('name', 'like', "%{$query}%")
+                          ->orWhere('no_telp', 'like', "%{$query}%");
+                  })
+                  ->orWhereHas('relawan', function ($sub) use ($query) {
+                      $sub->where('name', 'like', "%{$query}%");
+                  });
+            });
+        $laporanList = $laporanQuery->take(5)->get();
 
         // Search Pengguna
         $penggunaList = User::where('role', 'pengguna')
             ->where(function ($q) use ($query) {
                 $q->where('name', 'like', "%{$query}%")
+                  ->orWhere('email', 'like', "%{$query}%")
                   ->orWhere('no_telp', 'like', "%{$query}%");
             })
             ->take(5)
@@ -800,6 +1139,7 @@ class DashboardAdminController extends Controller
         $relawanList = User::where('role', 'relawan')
             ->where(function ($q) use ($query) {
                 $q->where('name', 'like', "%{$query}%")
+                  ->orWhere('email', 'like', "%{$query}%")
                   ->orWhere('no_telp', 'like', "%{$query}%");
             })
             ->take(5)
@@ -808,9 +1148,50 @@ class DashboardAdminController extends Controller
         return response()->json([
             'message' => "Hasil pencarian untuk '{$query}'",
             'data'    => [
-                'kasus_sos' => $kasusSos,
-                'pengguna'  => $penggunaList,
-                'relawan'   => $relawanList,
+                'kasus_sos' => $kasusSos->map(function ($sos) {
+                    return [
+                        'id'          => $sos->id,
+                        'nomor_kasus' => $sos->nomor_kasus ?? ("SOS-" . $sos->id),
+                        'status'      => $sos->status_sos,
+                        'pelapor'     => $sos->pengguna?->name ?? 'Pengguna SOS',
+                        'relawan'     => $sos->relawan?->name ?? null,
+                        'disabilitas' => $sos->pengguna?->kategori_user ?? 'umum',
+                        'lokasi'      => $sos->pengguna?->alamat ?? 'Lokasi GPS Korban',
+                        'waktu'       => $sos->waktu_sos ? $sos->waktu_sos->toIso8601String() : $sos->created_at?->toIso8601String(),
+                    ];
+                }),
+                'laporan'   => $laporanList->map(function ($lap) {
+                    return [
+                        'id'          => $lap->id,
+                        'nomor_kasus' => $lap->nomor_kasus ?? ("LP-" . $lap->id),
+                        'kategori'    => $lap->kategori_laporan,
+                        'status'      => $lap->status,
+                        'pelapor'     => $lap->pengguna?->name ?? 'Pengguna',
+                        'relawan'     => $lap->relawan?->name ?? null,
+                        'lokasi'      => $lap->lokasi_laporan ?? ($lap->pengguna?->alamat ?? 'Lokasi Laporan'),
+                        'waktu'       => $lap->waktu_laporan ? $lap->waktu_laporan->toIso8601String() : $lap->created_at?->toIso8601String(),
+                    ];
+                }),
+                'pengguna'  => $penggunaList->map(function ($user) {
+                    return [
+                        'id'        => $user->id,
+                        'nama'      => $user->name,
+                        'email'     => $user->email,
+                        'no_telp'   => $user->no_telp,
+                        'kategori'  => $user->kategori_user ?? 'umum',
+                        'alamat'    => $user->alamat ?? '-',
+                    ];
+                }),
+                'relawan'   => $relawanList->map(function ($user) {
+                    return [
+                        'id'        => $user->id,
+                        'nama'      => $user->name,
+                        'email'     => $user->email,
+                        'no_telp'   => $user->no_telp,
+                        'pekerjaan' => $user->pekerjaan ?? 'Relawan Pendamping',
+                        'status'    => $user->status_ketersediaan ?? 'tersedia',
+                    ];
+                }),
             ],
         ], 200);
     }
@@ -830,17 +1211,26 @@ class DashboardAdminController extends Controller
 
     private function determineVolunteerCompetency($relawan)
     {
-        if ($relawan->pekerjaan) {
+        if (!empty($relawan->pekerjaan)) {
             return $relawan->pekerjaan;
         }
 
-        // Custom default mapping based on ID parity / mock competencies for demo
-        $competencies = [
-            'Navigasi Tunanetra & P3K',
-            'Juru Bahasa Isyarat / JBI',
-            'Pendamping Mobilitas & Kursi Roda',
-        ];
+        if (!empty($relawan->keahlian)) {
+            return $relawan->keahlian;
+        }
 
-        return $competencies[$relawan->id % count($competencies)];
+        return $relawan->kategori_relawan ?? 'Relawan Pendamping Siaga';
+    }
+
+    private function calculateHaversineDistance($lat1, $lon1, $lat2, $lon2)
+    {
+        $earthRadius = 6371; // Radius bumi dalam kilometer
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+        $a = sin($dLat / 2) * sin($dLat / 2) +
+             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+             sin($dLon / 2) * sin($dLon / 2);
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+        return $earthRadius * $c;
     }
 }

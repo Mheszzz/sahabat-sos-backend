@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Laporan;
+use App\Models\CatatanPenanganan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 
 class LaporanController extends Controller
 {
@@ -41,6 +43,14 @@ class LaporanController extends Controller
             ], 403);
         }
 
+        // Proteksi Relawan belum terverifikasi
+        if ($user->role === 'relawan' && ($user->status_verifikasi !== 'terverifikasi' || !$user->is_active)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Akses ditolak. Akun relawan Anda belum diverifikasi oleh administrator.'
+            ], 403);
+        }
+
         $query = Laporan::with(['pengguna', 'relawan'])->latest();
 
         if ($user->role === 'pengguna') {
@@ -50,7 +60,7 @@ class LaporanController extends Controller
         if ($request->has('status')) {
             $statusInput = strtolower(trim($request->status));
             $statusFilter = match ($statusInput) {
-                'aktif', 'belum ditangani', 'belum_ditangani' => ['belum ditangani', 'aktif'],
+                'aktif', 'belum ditangani', 'belum_ditangani', 'belum tertangani', 'belum_tertangani', 'menunggu', 'pending' => ['belum ditangani', 'aktif'],
                 'proses', 'ditangani' => ['ditangani', 'proses'],
                 'selesai' => ['selesai'],
                 default => [$statusInput]
@@ -82,7 +92,28 @@ class LaporanController extends Controller
      */
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $input = $request->all();
+
+        // Normalisasi alias input payload
+        if (!isset($input['kategori_laporan']) && isset($input['kategori'])) {
+            $input['kategori_laporan'] = $input['kategori'];
+        }
+        if (!isset($input['lokasi_laporan'])) {
+            $input['lokasi_laporan'] = $input['lokasi'] ?? ($input['alamat'] ?? null);
+        }
+
+        // Tangkap file upload dengan fallback alias nama field
+        $fotoFile = $request->file('foto_laporan') ?? $request->file('foto') ?? $request->file('image');
+        $audioFile = $request->file('rekam_suara') ?? $request->file('audio') ?? $request->file('voice_note');
+
+        if ($fotoFile) {
+            $input['foto_laporan'] = $fotoFile;
+        }
+        if ($audioFile) {
+            $input['rekam_suara'] = $audioFile;
+        }
+
+        $validator = Validator::make($input, [
             'kategori_laporan'    => 'required|string|max:255',
             'lokasi_laporan'      => 'required|string|max:255',
             'latitude'            => 'nullable|numeric|between:-90,90',
@@ -91,8 +122,15 @@ class LaporanController extends Controller
             'deskripsi'           => 'nullable|string',
             'pesan_cepat'         => 'nullable',
             'keterangan_tambahan' => 'nullable|string',
-            'foto_laporan'        => 'nullable|file|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'foto_laporan'        => 'nullable|file|image|mimes:jpeg,png,jpg,webp|max:5120|dimensions:max_width=4096,max_height=4096',
             'rekam_suara'         => 'nullable|file|mimes:mp3,wav,m4a,aac,ogg,webm,3gp|max:10240',
+        ], [
+            'foto_laporan.image'      => 'File foto laporan harus berupa gambar yang valid.',
+            'foto_laporan.mimes'      => 'Format foto laporan harus berupa JPEG, PNG, JPG, atau WEBP.',
+            'foto_laporan.max'        => 'Ukuran foto laporan maksimal 5 MB.',
+            'foto_laporan.dimensions' => 'Dimensi foto laporan maksimal 4096 x 4096 piksel.',
+            'rekam_suara.mimes'       => 'Format rekaman suara harus berupa MP3, WAV, M4A, AAC, OGG, WEBM, atau 3GP.',
+            'rekam_suara.max'         => 'Ukuran file rekaman suara maksimal 10 MB.',
         ]);
 
         if ($validator->fails()) {
@@ -103,21 +141,30 @@ class LaporanController extends Controller
         }
 
         // Combine deskripsi, pesan_cepat, & keterangan_tambahan
-        $finalDeskripsi = $request->input('deskripsi', '');
+        $finalDeskripsi = $input['deskripsi'] ?? '';
         if (empty($finalDeskripsi)) {
             $parts = [];
-            $pesanCepat = $request->input('pesan_cepat');
+            $pesanCepat = $input['pesan_cepat'] ?? null;
             if (is_array($pesanCepat)) {
                 $parts[] = implode('. ', $pesanCepat);
             } elseif (is_string($pesanCepat) && !empty($pesanCepat)) {
                 $parts[] = $pesanCepat;
             }
 
-            if ($request->filled('keterangan_tambahan')) {
-                $parts[] = $request->keterangan_tambahan;
+            if (!empty($input['keterangan_tambahan'])) {
+                $parts[] = $input['keterangan_tambahan'];
             }
 
             $finalDeskripsi = implode("\n\nCatatan Tambahan: ", $parts);
+        }
+
+        // Fallback jika hanya melampirkan media (audio / foto) tanpa teks manual
+        if (empty($finalDeskripsi)) {
+            if ($audioFile) {
+                $finalDeskripsi = 'Laporan pesan suara (voice note)';
+            } elseif ($fotoFile) {
+                $finalDeskripsi = 'Laporan dengan lampiran foto';
+            }
         }
 
         if (empty($finalDeskripsi)) {
@@ -128,25 +175,25 @@ class LaporanController extends Controller
         }
 
         $fotoPath = null;
-        if ($request->hasFile('foto_laporan')) {
-            $fotoPath = $request->file('foto_laporan')->store('laporan/foto', 'public');
+        if ($fotoFile) {
+            $fotoPath = $fotoFile->store('laporan/foto', 'public');
         }
 
         $audioPath = null;
-        if ($request->hasFile('rekam_suara')) {
-            $audioPath = $request->file('rekam_suara')->store('laporan/audio', 'public');
+        if ($audioFile) {
+            $audioPath = $audioFile->store('laporan/audio', 'public');
         }
 
-        $latitude = $request->input('latitude');
-        $longitude = $request->input('longitude');
+        $latitude = $input['latitude'] ?? null;
+        $longitude = $input['longitude'] ?? null;
 
         $laporan = Laporan::create([
             'id_pengguna'      => $request->user()->id,
             'id_relawan'       => null,
-            'lokasi_laporan'   => $request->lokasi_laporan,
+            'lokasi_laporan'   => $input['lokasi_laporan'],
             'latitude'         => $latitude,
             'longitude'        => $longitude,
-            'kategori_laporan' => $request->kategori_laporan,
+            'kategori_laporan' => $input['kategori_laporan'],
             'deskripsi'        => $finalDeskripsi,
             'foto_laporan'     => $fotoPath,
             'rekam_suara'      => $audioPath,
@@ -160,10 +207,9 @@ class LaporanController extends Controller
 
         if ($latitude !== null && $longitude !== null) {
             $nearbyVolunteers = \App\Models\User::where('role', 'relawan')
-                ->where(function ($q) {
-                    $q->whereNull('status_ketersediaan')
-                      ->orWhere('status_ketersediaan', 'tersedia');
-                })
+                ->where('status_verifikasi', 'terverifikasi')
+                ->where('is_active', true)
+                ->where('status_ketersediaan', 'tersedia')
                 ->nearby((float)$latitude, (float)$longitude, $radiusInKm)
                 ->get()
                 ->map(function ($vol) {
@@ -203,6 +249,14 @@ class LaporanController extends Controller
      */
     public function nearby(Request $request)
     {
+        $user = $request->user();
+        if ($user && $user->role === 'relawan' && ($user->status_verifikasi !== 'terverifikasi' || !$user->is_active)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Akses ditolak. Akun relawan Anda belum diverifikasi oleh administrator.'
+            ], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'latitude'  => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
@@ -265,6 +319,14 @@ class LaporanController extends Controller
             ], 403);
         }
 
+        // Proteksi Relawan belum terverifikasi
+        if ($user->role === 'relawan' && ($user->status_verifikasi !== 'terverifikasi' || !$user->is_active)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Akses ditolak. Akun relawan Anda belum diverifikasi oleh administrator.'
+            ], 403);
+        }
+
         if ($user->role === 'pengguna' && $laporan->id_pengguna !== $user->id) {
             return response()->json(['message' => 'Akses ditolak'], 403);
         }
@@ -301,8 +363,19 @@ class LaporanController extends Controller
             ], 403);
         }
 
+        // Proteksi Relawan belum terverifikasi
+        if ($user->role === 'relawan' && ($user->status_verifikasi !== 'terverifikasi' || !$user->is_active)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Akses ditolak. Akun relawan Anda belum diverifikasi oleh administrator.'
+            ], 403);
+        }
+
         $request->validate([
-            'status' => 'required|in:belum ditangani,ditangani,selesai,aktif,proses',
+            'status'             => 'required|in:belum ditangani,ditangani,selesai,aktif,proses,menunggu,pending',
+            'catatan'            => 'nullable|string|max:1000',
+            'notes'              => 'nullable|string|max:1000',
+            'catatan_penanganan' => 'nullable|string|max:1000',
         ]);
 
         $laporan = Laporan::find($id);
@@ -311,17 +384,54 @@ class LaporanController extends Controller
         }
 
         $targetStatus = match ($request->status) {
-            'aktif'  => 'belum ditangani',
-            'proses' => 'ditangani',
-            default  => $request->status,
+            'aktif', 'menunggu', 'pending' => 'belum ditangani',
+            'proses'                       => 'ditangani',
+            default                        => $request->status,
         };
-        $laporan->status = $targetStatus;
-        if (in_array($targetStatus, ['ditangani', 'proses']) && $user->role === 'relawan' && empty($laporan->id_relawan)) {
-            $laporan->id_relawan = $user->id;
+
+        // Validasi: Relawan hanya bisa menyelesaikan laporan jika relawan tersebut yang mengambil/bertugas
+        if ($targetStatus === 'selesai' && $user->role === 'relawan') {
+            if (empty($laporan->id_relawan) || (int) $laporan->id_relawan !== (int) $user->id) {
+                return response()->json([
+                    'message' => 'Anda tidak memiliki hak untuk menyelesaikan laporan ini. Hanya relawan yang bertugas yang dapat menyelesaikan laporan.'
+                ], 403);
+            }
         }
+
+        if (in_array($targetStatus, ['ditangani', 'proses']) && $user->role === 'relawan') {
+            if (!empty($laporan->id_relawan) && (int) $laporan->id_relawan !== (int) $user->id) {
+                return response()->json([
+                    'message' => 'Laporan ini sudah diambil oleh relawan lain.'
+                ], 400);
+            }
+            if (empty($laporan->id_relawan)) {
+                $laporan->id_relawan = $user->id;
+            }
+        }
+
+        $laporan->status = $targetStatus;
         $laporan->save();
 
-        $laporan->load(['pengguna', 'relawan']);
+        if ($targetStatus === 'selesai') {
+            $catatanText = $request->input('catatan') ?? $request->input('notes') ?? $request->input('catatan_penanganan');
+            if (!empty($catatanText)) {
+                CatatanPenanganan::create([
+                    'id_admin'   => $user->id,
+                    'id_laporan' => $laporan->id,
+                    'id_sos'     => null,
+                    'catatan'    => $catatanText,
+                ]);
+            }
+
+            if ($user->role === 'relawan') {
+                $user->update(['status_ketersediaan' => 'tersedia']);
+            }
+
+            Cache::forget("laporan:{$laporan->id}:polyline");
+            Cache::forget("laporan:{$laporan->id}:last_reroute");
+        }
+
+        $laporan->load(['pengguna', 'relawan', 'catatanPenanganan.admin']);
 
         return response()->json([
             'message' => 'Status laporan berhasil diperbarui',
