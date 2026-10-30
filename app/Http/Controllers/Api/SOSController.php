@@ -141,6 +141,7 @@ class SOSController extends Controller
             'battery_level'   => 'nullable|integer|between:0,100',
             'signal_strength' => 'nullable|string|max:50',
             'trigger_source'  => 'nullable|string|max:50',
+            'heart_rate'      => 'nullable|integer|between:20,300',
             'device_info'     => 'nullable',
         ]);
 
@@ -158,6 +159,32 @@ class SOSController extends Controller
 
         if ($request->filled('trigger_source')) {
             $deviceInfo['trigger_source'] = $request->trigger_source;
+        }
+
+        // Tangkap data heart_rate jika dikirim di root payload
+        if ($request->filled('heart_rate')) {
+            $deviceInfo['heart_rate'] = (int) $request->heart_rate;
+        }
+
+        // Harmonisasi format smartband -> smartwatch
+        if (isset($deviceInfo['smartband']) && !isset($deviceInfo['smartwatch'])) {
+            $deviceInfo['smartwatch'] = $deviceInfo['smartband'];
+        }
+        if (isset($deviceInfo['smartwatch']) && is_array($deviceInfo['smartwatch'])) {
+            if (!isset($deviceInfo['smartwatch']['heart_rate'])) {
+                $deviceInfo['smartwatch']['heart_rate'] = $deviceInfo['smartwatch']['bpm'] ?? $deviceInfo['smartwatch']['heart_rate_bpm'] ?? ($deviceInfo['heart_rate'] ?? null);
+            }
+        } elseif (isset($deviceInfo['heart_rate'])) {
+            $deviceInfo['smartwatch'] = [
+                'device_id'    => 'smartband_sensor',
+                'device_name'  => 'Smartband / Health Connect',
+                'device_model' => 'Smartband',
+                'brand'        => 'huawei_health_connect',
+                'heart_rate'   => (int) $deviceInfo['heart_rate'],
+                'bpm'          => (int) $deviceInfo['heart_rate'],
+                'is_online'    => true,
+                'trigger_type' => 'Sensor Detak Jantung',
+            ];
         }
 
         if ($isFallback) {
@@ -197,15 +224,20 @@ class SOSController extends Controller
         $triggerSrc = $sos->device_info['trigger_source'] ?? 'app_button';
         if ($triggerSrc === 'tuya_physical_button') {
             $activityDesc = "Sinyal darurat SOS diaktifkan melalui Tombol Fisik Darurat Tuya" . ($isFallback ? " (Lokasi: {$fallbackLabel})" : "");
-        } elseif (in_array($triggerSrc, ['smartwatch_button', 'smartwatch_fall_detection'])) {
-            $watchModel = $sos->device_info['smartwatch']['device_model'] ?? 'Smartwatch';
+        } elseif (in_array($triggerSrc, ['smartwatch_button', 'smartwatch_fall_detection', 'smartband_heart_rate', 'smartwatch_heart_rate_anomaly'])) {
+            $watchModel = $sos->device_info['smartwatch']['device_model'] ?? ($sos->device_info['smartwatch']['device_name'] ?? 'Smartband / Smartwatch');
             $bpm = $sos->device_info['smartwatch']['heart_rate'] ?? null;
             $bpmText = $bpm ? " (Detak jantung: {$bpm} BPM)" : '';
             if ($triggerSrc === 'smartwatch_fall_detection') {
                 $activityDesc = "Sinyal darurat SOS dipicu otomatis oleh Deteksi Jatuh pada {$watchModel}{$bpmText}" . ($isFallback ? " (Lokasi: {$fallbackLabel})" : "");
+            } elseif (in_array($triggerSrc, ['smartband_heart_rate', 'smartwatch_heart_rate_anomaly'])) {
+                $activityDesc = "Sinyal darurat SOS dipicu otomatis oleh sensor Detak Jantung pada {$watchModel}{$bpmText}" . ($isFallback ? " (Lokasi: {$fallbackLabel})" : "");
             } else {
                 $activityDesc = "Sinyal darurat SOS diaktifkan melalui Tombol Darurat pada {$watchModel}{$bpmText}" . ($isFallback ? " (Lokasi: {$fallbackLabel})" : "");
             }
+        } elseif (!empty($sos->device_info['smartwatch']['heart_rate'])) {
+            $bpm = $sos->device_info['smartwatch']['heart_rate'];
+            $activityDesc = "Sinyal darurat SOS diaktifkan oleh {$request->user()->name} (Detak jantung: {$bpm} BPM)" . ($isFallback ? " (Lokasi: {$fallbackLabel})" : "");
         }
 
         // Catat log aktivitas awal

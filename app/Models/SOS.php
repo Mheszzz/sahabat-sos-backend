@@ -88,11 +88,49 @@ class SOS extends Model
         $value = $value ?? ($this->attributes['device_info'] ?? null);
         $raw = !empty($value) ? (is_array($value) ? $value : json_decode($value, true)) : [];
 
-        // Deteksi format terstruktur (punya key 'mobile', 'tuya', atau 'smartwatch') atau legacy flat
-        $hasStructured = isset($raw['mobile']) || isset($raw['tuya']) || isset($raw['smartwatch']);
+        // Deteksi format terstruktur (punya key 'mobile', 'tuya', 'smartwatch', atau 'smartband') atau legacy flat
+        $hasStructured = isset($raw['mobile']) || isset($raw['tuya']) || isset($raw['smartwatch']) || isset($raw['smartband']);
         $mobileRaw = $hasStructured ? ($raw['mobile'] ?? []) : $raw;
         $tuyaRaw = $raw['tuya'] ?? null;
-        $smartwatchRaw = $raw['smartwatch'] ?? null;
+        $smartwatchRaw = $raw['smartwatch'] ?? $raw['smartband'] ?? null;
+
+        // Fallback jika smartwatch belum terisi tetapi terdapat data detak jantung (heart_rate / bpm)
+        if (empty($smartwatchRaw)) {
+            $rawHeartRate = $raw['heart_rate'] ?? ($mobileRaw['heart_rate'] ?? null);
+            if ($rawHeartRate !== null && (int) $rawHeartRate > 0) {
+                $smartwatchRaw = [
+                    'device_id'    => 'smartband_sensor',
+                    'device_name'  => 'Smartband / Health Connect',
+                    'device_model' => 'Smartband',
+                    'brand'        => 'huawei_health_connect',
+                    'heart_rate'   => (int) $rawHeartRate,
+                    'bpm'          => (int) $rawHeartRate,
+                    'is_online'    => true,
+                    'trigger_type' => 'Sensor Detak Jantung',
+                ];
+            } else {
+                // Fallback: periksa user_smartwatches pengguna pemilik SOS jika ada
+                try {
+                    $pairedWatch = $this->pengguna?->smartwatches()->where('is_active', true)->latest('last_synced_at')->first();
+                    if ($pairedWatch && $pairedWatch->last_heart_rate !== null) {
+                        $smartwatchRaw = [
+                            'device_id'       => $pairedWatch->device_identifier,
+                            'device_name'     => $pairedWatch->device_model ?? 'Smartwatch',
+                            'brand'           => $pairedWatch->brand ?? 'generic_ble',
+                            'device_model'    => $pairedWatch->device_model ?? 'Smartwatch',
+                            'is_online'       => true,
+                            'battery_level'   => $pairedWatch->last_battery_level,
+                            'heart_rate'      => $pairedWatch->last_heart_rate,
+                            'bpm'             => $pairedWatch->last_heart_rate,
+                            'trigger_type'    => 'Telemetri Smartwatch Tersinkron',
+                            'last_seen'       => $pairedWatch->last_synced_at?->toIso8601String() ?? now()->toIso8601String(),
+                        ];
+                    }
+                } catch (\Throwable $e) {
+                    // Ignore exception in accessor
+                }
+            }
+        }
 
         // Telemetri Mobile (HP Pengguna)
         $batteryLevel = $mobileRaw['battery_level'] ?? ($this->attributes['battery_level'] ?? ($raw['battery_level'] ?? 85));
@@ -154,28 +192,34 @@ class SOS extends Model
                 : null;
             $heartRate = isset($smartwatchRaw['heart_rate']) && $smartwatchRaw['heart_rate'] !== null
                 ? (int) $smartwatchRaw['heart_rate']
-                : null;
+                : (isset($smartwatchRaw['bpm']) && $smartwatchRaw['bpm'] !== null
+                    ? (int) $smartwatchRaw['bpm']
+                    : (isset($smartwatchRaw['heart_rate_bpm']) && $smartwatchRaw['heart_rate_bpm'] !== null
+                        ? (int) $smartwatchRaw['heart_rate_bpm']
+                        : ($raw['heart_rate'] ?? null)));
+            $heartRate = $heartRate !== null ? (int) $heartRate : null;
             $fallDetected = (bool) ($smartwatchRaw['fall_detected'] ?? false);
 
             $smartwatch = [
                 'device_id'       => $smartwatchRaw['device_id'] ?? 'smartwatch',
                 'device_name'     => $smartwatchRaw['device_name'] ?? ($smartwatchRaw['name'] ?? 'Smartwatch'),
                 'brand'           => $smartwatchRaw['brand'] ?? 'smartwatch',
-                'device_model'    => $smartwatchRaw['device_model'] ?? ($smartwatchRaw['model'] ?? 'Smartwatch'),
+                'device_model'    => $smartwatchRaw['device_model'] ?? ($smartwatchRaw['model'] ?? ($smartwatchRaw['type'] ?? 'Smartwatch')),
                 'is_online'       => (bool) ($smartwatchRaw['is_online'] ?? true),
                 'battery_level'   => $watchBattery,
                 'battery_status'  => $watchBattery !== null ? ($watchBattery < 20 ? 'Kritis' : ($watchBattery < 50 ? 'Sedang' : 'Baik')) : 'N/A',
                 'is_battery_low'  => $watchBattery !== null && $watchBattery < 20,
                 'heart_rate'      => $heartRate,
+                'bpm'             => $heartRate,
                 'fall_detected'   => $fallDetected,
-                'trigger_type'    => $smartwatchRaw['trigger_type'] ?? ($fallDetected ? 'Deteksi Jatuh Jam' : 'Tombol SOS Jam'),
+                'trigger_type'    => $smartwatchRaw['trigger_type'] ?? ($fallDetected ? 'Deteksi Jatuh Jam' : ($heartRate ? 'Sensor Detak Jantung' : 'Tombol SOS Jam')),
                 'last_seen'       => $smartwatchRaw['last_seen'] ?? now()->toIso8601String(),
             ];
         }
 
         $triggerSource = $raw['trigger_source'] ?? (
             $tuya ? 'tuya_physical_button' : (
-                $smartwatch ? ($smartwatch['fall_detected'] ? 'smartwatch_fall_detection' : 'smartwatch_button') : 'app_button'
+                $smartwatch ? ($smartwatch['fall_detected'] ? 'smartwatch_fall_detection' : ($smartwatch['heart_rate'] ? 'smartband_heart_rate' : 'smartwatch_button')) : 'app_button'
             )
         );
 
@@ -189,6 +233,8 @@ class SOS extends Model
             'os_version'      => $mobile['os_version'],
             'is_online'       => true,
             'is_charging'     => $isCharging,
+            'heart_rate'      => $smartwatch['heart_rate'] ?? null,
+            'bpm'             => $smartwatch['heart_rate'] ?? null,
 
             // Struktur lengkap telemetri baru
             'trigger_source'       => $triggerSource,
@@ -201,6 +247,7 @@ class SOS extends Model
             'mobile'               => $mobile,
             'tuya'                 => $tuya,
             'smartwatch'           => $smartwatch,
+            'smartband'            => $smartwatch,
         ];
     }
 
